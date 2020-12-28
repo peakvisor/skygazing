@@ -1,5 +1,5 @@
 # skygazing
-Lightweight header-only C++ library for astronomical calculations. Developed for use in [Peakvisor](https://peakvisor.com). 
+Lightweight header-only C++ library for astronomical calculations. Developed for use in [PeakVisor](https://peakvisor.com). 
 
 Files with “_test” in the name are for testing.
 
