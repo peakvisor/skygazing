@@ -1,15 +1,12 @@
 #include <random>
 #include <chrono>
 #include <set>
-#include <chrono>
 #include <ctime>
 
-#include "skygazing_test.h"
 #include "AA+.h"
-#include "skygazing_sun.h"
-#include "skygazing_moon.h"
+#include "../skygazing.h"
+#include "skygazing_test.h"
 #include "skygazing_test_analytics.h"
-#include "skygazing_sky.h"
 
 using namespace Skygazing;
 using std::literals::operator""s;
@@ -35,6 +32,7 @@ struct AAPlus {
         double AST = CAASidereal::ApparentGreenwichSiderealTime(julian);
         double LongtitudeAsHourAngle = CAACoordinateTransformation::DegreesToHours(-coordinates.lng);
         double LocalHourAngle = AST - LongtitudeAsHourAngle - SunTopo.X;
+        sun.hourAngle = CAACoordinateTransformation::HoursToRadians(LocalHourAngle);
         CAA2DCoordinate SunHorizontal = CAACoordinateTransformation::Equatorial2Horizontal(LocalHourAngle, SunTopo.Y, coordinates.lat);
         SunHorizontal.Y += CAARefraction::RefractionFromTrue(SunHorizontal.Y, 1010, 10);
         Coordinates horizontal{radsFromDegrees(SunHorizontal.Y), radsFromDegrees(SunHorizontal.X)};
@@ -96,7 +94,7 @@ void testSunObservation(int seed = 23, bool showStatistics = false) {
         for (int i = 0; i < kIterations; ++i) {
             auto date = dataGenerator.getRandomDate(year);
             auto seconds = tmToSeconds(&date);
-            auto observer = dataGenerator.randomCoordinates();
+            auto observer = dataGenerator.getRandomCoordinates();
 
             auto sgSun = Sky::observe<Sun>(seconds, observer);
             auto aaSun = AAPlus::observeSun(secondsToJulianSinceJulianEpoch(seconds), observer, true);
@@ -125,7 +123,7 @@ void testMoonObservation(int seed, bool showStatistics = false) {
         for (int i = 0; i < kIterations; ++i) {
             auto date = dataGenerator.getRandomDate(year);
             auto seconds = timegm(&date);
-            auto observer = dataGenerator.randomCoordinates();
+            auto observer = dataGenerator.getRandomCoordinates();
 
             auto sgMoon = Sky::observe<Moon>(seconds, observer);
             auto sgSun = Sky::observe<Sun>(seconds, observer);
@@ -156,11 +154,11 @@ void testMoonObservation(int seed, bool showStatistics = false) {
 
 int main() {
     const auto startTime = std::chrono::high_resolution_clock::now();
-    Testing::runAllTests();
+    SKYGAZING_TIME_EXECUTION(Testing::runAllTests());
 
     std::random_device trueRandom;
-    testMoonObservation(trueRandom());
-    testSunObservation(trueRandom());
+    SKYGAZING_TIME_EXECUTION(testMoonObservation(trueRandom()));
+    SKYGAZING_TIME_EXECUTION(testSunObservation(trueRandom()));
 
     const auto finishTime = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::milli> ms = finishTime - startTime;

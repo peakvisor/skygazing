@@ -3,26 +3,35 @@
 
 #include <sstream>
 #include <iomanip>
+#include <chrono>
 
 namespace Skygazing {
 
 using OriginalJulian = double; // Julian Day Number https://en.wikipedia.org/wiki/Julian_day
 using Julian = double; // Julian days since kJulianYear2000
 constexpr Seconds kSecondsInHour = 3600;
-constexpr Seconds kSecondsInDay = kSecondsInHour * 24;
+constexpr double kHoursInDay = 24.;
+constexpr Seconds kSecondsInDay = kSecondsInHour * kHoursInDay;
 constexpr OriginalJulian kJulianYear1970 = 2440588;
 constexpr OriginalJulian kJulianYear2000 = 2451545;
 constexpr Julian kJulianFrom1970To2000 = 2451545 - 2440588;
 constexpr Julian kJulianCentury = 36525;
 
-inline Seconds dateStringToSeconds(const std::string &dateString, int timezone = 0) {
+Seconds getCurrentSeconds() {
+    auto timePointNow = std::chrono::high_resolution_clock::now().time_since_epoch();
+    auto durationNow = std::chrono::duration_cast<std::chrono::milliseconds>(timePointNow);
+    constexpr double kPrecision = 1.e-3;
+    return static_cast<double>(durationNow.count()) * kPrecision;
+}
+
+inline Seconds secondsFromDateString(const std::string &dateString, int timezone = 0) {
     tm tmp{};
     std::istringstream ss(dateString);
     ss >> std::get_time(&tmp, "%Y-%m-%dT%H:%M:%SZ");
     return static_cast<Seconds>(timegm(&tmp)) - timezone * kSecondsInHour;
 }
 
-inline std::string secondsToDateString(Seconds secondsSince1970, int timezone = 0) {
+inline std::string dateStringFromSeconds(Seconds secondsSince1970, int timezone = 0) {
     time_t t(static_cast<int>(std::floor(secondsSince1970)));
     t += timezone * kSecondsInHour;
     tm date = *gmtime(&t);
@@ -59,19 +68,6 @@ inline std::tm* secondsToTm(Seconds seconds) {
     return gmtime(&time);
 }
 
-inline Julian tmToJulian(std::tm *date) {
-    return secondsToJulian(tmToSeconds(date));
-}
-
-inline Julian tmToJulianSinceJulianEpoch(tm *date) {
-    time_t time = timegm(date);
-    return secondsToJulianSinceJulianEpoch(time);
-}
-
-inline std::tm* julianToTm(Julian julian) {
-    return secondsToTm(julianToSeconds(julian));
-}
-
 constexpr Julian toJulianCenturies(Julian julian) {
     return julian / kJulianCentury;
 }
@@ -91,12 +87,20 @@ constexpr Julian fromTerrestrialTime(Julian jd) {
     return jd - deltaT / 86400;
 }
 
-constexpr Julian secondsToTerrestrialJulian(Seconds seconds) noexcept {
+constexpr Julian terrestrialJulianFromSeconds(Seconds seconds) noexcept {
     return toTerrestrialTime(secondsToJulian(seconds));
 }
 
-constexpr Seconds terrestrialJulianToSeconds(Julian terrestrialJulian) {
+constexpr std::optional<Julian> terrestrialJulianFromSeconds(const std::optional<Seconds> &seconds) noexcept {
+    return seconds ? std::optional<Julian>(terrestrialJulianFromSeconds(*seconds)) : std::nullopt;
+}
+
+constexpr Seconds secondsFromTerrestrialJulian(Julian terrestrialJulian) noexcept {
     return julianToSeconds(fromTerrestrialTime(terrestrialJulian));
+}
+
+constexpr std::optional<Seconds> secondsFromTerrestrialJulian(const std::optional<Julian> &terrestrialJulian) noexcept {
+    return terrestrialJulian ? std::optional<Seconds>(secondsFromTerrestrialJulian(*terrestrialJulian)) : std::nullopt;
 }
 
 } // namespace Skygazing

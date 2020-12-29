@@ -5,16 +5,17 @@
 #include "skygazing_math.h"
 #include "skygazing_time.h"
 
-#include <iostream>
-
 namespace Skygazing {
 
 struct Sky {
     static constexpr Rads kEarthObliquity = 23.4397_deg;
+    static constexpr Julian kTimesFindingPrecision = 10. / kSecondsInDay;
+    static constexpr Julian kTimesFindingStep = 300. / kSecondsInDay;
+    static constexpr Julian kTransitHalfWindow = 13 / kHoursInDay;
 
     struct EclipticPosition {
         Coordinates coordinates;
-        double distanceKm;
+        double distance;
     };
 
     struct CelestialObjectObservation {
@@ -22,25 +23,17 @@ struct Sky {
         CelestialObjectObservation(CelestialObjectObservation &&other) = default;
         CelestialObjectObservation(Julian julian, const EclipticPosition &eclipticPosition,
                                    const DegreesCoordinates &observerCoordinates, bool addRefraction = true)
-                                   : julian{julian},
-                                   observer{radsFromDegrees(observerCoordinates.lat), radsFromDegrees(observerCoordinates.lng)},
-                                   ecliptic{eclipticPosition.coordinates},
-                                   equatorial{eclipticToEquatorial(ecliptic)},
-                                   hourAngle{getLocalHourAngle(julian, observer.lng, equatorial.lng)},
-                                   horizontal{getHorizontalCoordinatesFromHourAngle(hourAngle, observer.lat, equatorial.lat)},
-                                   distance(eclipticPosition.distanceKm)
+            : julian{julian}
+            , observer{radsFromDegrees(observerCoordinates)}
+            , ecliptic{eclipticPosition.coordinates}
+            , equatorial{eclipticToEquatorial(ecliptic)}
+            , hourAngle{getLocalHourAngle(julian, observer.lng, equatorial.lng)}
+            , horizontal{getHorizontalCoordinatesFromHourAngle(hourAngle, observer.lat, equatorial.lat)}
+            , distance(eclipticPosition.distance)
         {
             if (addRefraction) {
                 accountForRefraction();
             }
-        }
-
-        void print() const {
-            std::cout << "julian: " << julian << std::endl;
-            std::cout << "ecliptic: " << ecliptic.toDegreesString() << std::endl;
-            std::cout << "equatorial: " << equatorial.toDegreesString() << std::endl;
-            std::cout << "observer: " << observer.toDegreesString() << std::endl;
-            std::cout << "horizontal: " << horizontal.toDegreesString() << std::endl;
         }
 
         Rads declination() const { return equatorial.lat; }
@@ -51,22 +44,14 @@ struct Sky {
         Rads azimuth() const { return horizontal.lng; }
         Rads getParallacticAngle() {
             if (!parallacticAngle) {
-                parallacticAngle = std::atan2(
-                        std::sin(hourAngle),
-                        std::tan(observer.lat) * std::cos(declination()) - std::sin(declination()) * std::cos(hourAngle));
+                parallacticAngle = std::atan2(std::sin(hourAngle),
+                    std::tan(observer.lat) * std::cos(declination()) - std::sin(declination()) * std::cos(hourAngle));
             }
             return *parallacticAngle;
         }
 
         void accountForRefraction() {
             horizontal.lat += getRefractionFromTrue(horizontal.lat);
-        }
-
-        double getGeocentricElongation(const Coordinates &sunEquatorial) const {
-            double cosGeocentricElongation =
-                std::sin(sunEquatorial.lat) * std::sin(equatorial.lat)
-                + std::cos(sunEquatorial.lat) * std::cos(equatorial.lat) * std::cos(sunEquatorial.lng - equatorial.lng);
-            return std::acos(clamp(cosGeocentricElongation, 1));
         }
 
         Julian julian;
@@ -87,15 +72,14 @@ struct Sky {
 
     template <typename CelestialObject>
     static CelestialObjectObservation observe(Seconds seconds, const DegreesCoordinates &observer) {
-        Julian julian = secondsToJulian(seconds);
-        Julian terrestrialJulian = toTerrestrialTime(julian);
+        Julian terrestrialJulian = terrestrialJulianFromSeconds(seconds);
         return observeInTerrestrialTime<CelestialObject>(terrestrialJulian, observer);
     }
 
     template <typename CelestialObject>
     static DegreesCoordinates getHorizontalDegreesCoordinates(Seconds seconds, const DegreesCoordinates &observer) {
         auto observation = observe<CelestialObject>(seconds, observer);
-        return observation.horizontal.toDegrees();
+        return degreesFromRads(observation.horizontal);
     }
 
     static Rads getRefractionFromTrue(Rads altitudeAngle) noexcept {
@@ -156,22 +140,34 @@ struct Sky {
         return std::acos(clamp(cosGeocentricElongation, 1.));
     }
 
-    struct Times {
+    struct NotableTimesInSeconds {
         std::optional<Seconds> rise;
         std::optional<Seconds> transit;
         std::optional<Seconds> set;
     };
 
+    struct NotableTimesInTerrestrialTime {
+        std::optional<Julian> rise;
+        std::optional<Julian> transit;
+        std::optional<Julian> set;
+
+        NotableTimesInSeconds toSeconds() const {
+            return {secondsFromTerrestrialJulian(rise), secondsFromTerrestrialJulian(transit), secondsFromTerrestrialJulian(set)};
+        }
+    };
+
     template <typename CelestialBody>
     static std::optional<Julian> getTransitInTerrestrialFromTerrestrial(Julian terrestrialJulian,
-                                                                         const DegreesCoordinates &observer) {
+                                                                        const DegreesCoordinates &observer)
+    {
         auto getAltitudeAngle = [&observer](Julian julian) {
             auto observation = Sky::observeInTerrestrialTime<CelestialBody>(julian, observer);
             return observation.altitudeAngle();
         };
         auto altitudeAngleAnalyzer = FunctionAnalyzer{std::move(getAltitudeAngle)};
-        auto maxSample = altitudeAngleAnalyzer.findMax(terrestrialJulian - 0.5, terrestrialJulian + 0.5,
-                                                       300. / kSecondsInDay, 10. / kSecondsInDay);
+        auto maxSample = altitudeAngleAnalyzer.findMax(terrestrialJulian - kTransitHalfWindow,
+                                                       terrestrialJulian + kTransitHalfWindow,
+                                                       kTimesFindingStep, kTimesFindingPrecision);
         if (maxSample) {
             return maxSample->arg;
         } else {
@@ -181,37 +177,45 @@ struct Sky {
 
     template <typename CelestialBody>
     static std::optional<Seconds> getTransit(Seconds seconds, const DegreesCoordinates &observer) {
-        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(secondsToTerrestrialJulian(seconds), observer);
+        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(terrestrialJulianFromSeconds(seconds), observer);
         if (transit) {
-            transit = terrestrialJulianToSeconds(*transit);
+            transit = secondsFromTerrestrialJulian(*transit);
         }
         return transit;
     }
 
     template <typename CelestialBody>
-    static Times findTimes(Seconds seconds, const DegreesCoordinates &observer, Rads bodySize) {
-        Julian someJulianAtTheDate = secondsToTerrestrialJulian(seconds);
+    static NotableTimesInTerrestrialTime getNotableTimesInTerrestrialTime(Seconds seconds, const DegreesCoordinates &observer) {
+        Julian someJulianAtTheDate = terrestrialJulianFromSeconds(seconds);
 
         auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(someJulianAtTheDate, observer);
         if (transit.has_value()) {
-            auto getUpperEdgeAltitudeAngle = [&observer, &bodySize](Julian julian) {
+            auto upperEdgeAltitudeAngleAnalyzer = FunctionAnalyzer{[&observer](Julian julian) {
                 auto observation = Sky::observeInTerrestrialTime<CelestialBody>(julian, observer);
-                return observation.altitudeAngle() + bodySize / 2;
-            };
-            auto upperEdgeAltitudeAngleAnalyzer = FunctionAnalyzer{std::move(getUpperEdgeAltitudeAngle)};
-            auto rise = upperEdgeAltitudeAngleAnalyzer.findSignChangeToPositive(*transit - 0.5, *transit,
-                                                                                300. / kSecondsInDay, 10. / kSecondsInDay);
-            if (rise.has_value()) {
-                rise = terrestrialJulianToSeconds(*rise);
-            }
-            auto set = upperEdgeAltitudeAngleAnalyzer.findSignChangeToPositive(*transit + 0.5, *transit,
-                                                                               300. / kSecondsInDay, 10. / kSecondsInDay);
-            if (set.has_value()) {
-                set = terrestrialJulianToSeconds(*set);
-            }
-            return {rise, terrestrialJulianToSeconds(*transit), set};
+                return observation.altitudeAngle() + CelestialBody::meanAngularSize() / 2;
+            }};
+            auto rise = upperEdgeAltitudeAngleAnalyzer.findSignChangeToPositive(*transit - kTransitHalfWindow, *transit,
+                                                                                kTimesFindingStep, kTimesFindingPrecision);
+            auto set = upperEdgeAltitudeAngleAnalyzer.findSignChangeToPositive(*transit + kTransitHalfWindow, *transit,
+                                                                               kTimesFindingStep, kTimesFindingPrecision);
+            return {rise, transit, set};
         }
         return {};
+    }
+
+    template <typename CelestialBody>
+    static NotableTimesInSeconds getTimes(Seconds seconds, const DegreesCoordinates &observer) {
+        return getNotableTimesInTerrestrialTime<CelestialBody>(seconds, observer).toSeconds();
+    }
+
+    template <typename CelestialBody>
+    static std::optional<Seconds> getSet(Seconds seconds, const DegreesCoordinates &observer) {
+        return getTimes<CelestialBody>(seconds, observer).set;
+    }
+
+    template <typename CelestialBody>
+    static std::optional<Seconds> getRise(Seconds seconds, const DegreesCoordinates &observer) {
+        return getTimes<CelestialBody>(seconds, observer).rise;
     }
 };
 

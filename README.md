@@ -7,4 +7,5 @@ Based on [mourner/suncalc](https://github.com/mourner/suncalc), [AAPlus library]
 
 // [AA] “Astronomical Algorithms” 2nd edition by Jean Meeus (Willmann-Bell, Richmond) 1998.
 
-Tested against AAPlus library.
+To test against AAPlus library, use CMake argument -DSKYGAZING_AAPLUS_SRC="/path/to/aaplus_source/"
+and build ${SKYGAZING_AAPLUS_SRC}/cmake-build-release/lib/libaaplus.dylib yourself. 

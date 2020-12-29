@@ -1,7 +1,7 @@
 #ifndef SKYGAZING_TEST_ANALYTICS_H
 #define SKYGAZING_TEST_ANALYTICS_H
 
-#include "skygazing_math.h"
+#include "../skygazing_math.h"
 
 #include <algorithm>
 #include <vector>
@@ -29,8 +29,13 @@ void assertSmallImpl(const T &x, const std::string &xString, double precision) {
     }
 }
 
+void outputExecutionTimeMessage(Seconds executionStart, const std::string &taskName) {
+    std::cout << taskName << " completed in " << std::setprecision(6) << getCurrentSeconds() - executionStart << "s\n";
+}
+
 #define SKYGAZING_ASSERT_NEAR(L, R, P) assertEqualityImpl((L), (R), #L, #R, (P));
-#define SKYGAZING_ASSERT_SMALL(X, P) assertSmallImpl((X), #X, (P));
+#define SKYGAZING_ASSERT_SMALL(X, P) Skygazing::assertSmallImpl((X), #X, (P));
+#define SKYGAZING_TIME_EXECUTION(T) {auto t = Skygazing::getCurrentSeconds(); (T); Skygazing::outputExecutionTimeMessage(t, #T);}
 
 template <int decimalPlaces, typename Value>
 Value round(Value w) {
@@ -65,7 +70,7 @@ struct RandomDataGenerator {
         return date;
     }
 
-    DegreesCoordinates randomCoordinates(Degrees minAbsLat = 0, Degrees maxAbsLat = 90.) {
+    DegreesCoordinates getRandomCoordinates(Degrees minAbsLat = 0, Degrees maxAbsLat = 90.) {
         Degrees halfSpan = maxAbsLat - minAbsLat;
         Degrees lat = std::uniform_real_distribution<Degrees>(-halfSpan, halfSpan)(generator);
         lat = lat < 0 ? lat + minAbsLat : lat - minAbsLat;

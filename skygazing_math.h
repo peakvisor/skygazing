@@ -5,7 +5,6 @@
 #include <cmath>
 #include <vector>
 #include <map>
-#include <cassert>
 #include <utility>
 #include <optional>
 
@@ -37,7 +36,6 @@ constexpr Double normalizeAdding(Double value, Double min, Double turn) {
     while (value >= min + turn) {
         value -= turn;
     }
-    assert(value >= min && value < turn);
     return value;
 }
 
@@ -70,16 +68,15 @@ struct Coordinates {
     [[nodiscard]] Coordinates normalize() const {
         return {normalizeHugeRads(lat),normalizeHugeRads(lng)};
     }
-
-    DegreesCoordinates toDegrees() const {
-        return {degreesFromRads(lat), degreesFromRads(lng)};
-    }
-
-    std::string toDegreesString()  const {
-        return "(" + std::to_string(degreesFromRads(normalizeHugeRads(lat))) + ", "
-               + std::to_string(degreesFromRads(normalizeHugeRads(lng))) + ")";
-    }
 };
+
+constexpr DegreesCoordinates degreesFromRads(const Coordinates &coordinates) {
+    return {degreesFromRads(coordinates.lat), degreesFromRads(coordinates.lng)};
+}
+
+constexpr inline Coordinates radsFromDegrees(const DegreesCoordinates &degreesCoordinates) {
+    return {radsFromDegrees(degreesCoordinates.lat), radsFromDegrees(degreesCoordinates.lng)};
+}
 
 inline auto haversineDistance(const Coordinates &from, const Coordinates &to) {
     auto latSin = std::sin((from.lat - to.lat) / 2);
@@ -186,7 +183,8 @@ struct FunctionAnalyzer {
     }
 
     std::optional<Sample> getMax(Sample left, Sample mid, Sample right, Argument precision,
-                                 int maxIterations = 100) const {
+                                 int maxIterations = 100) const
+    {
         for (int i = 0; i < maxIterations; ++i) {
             if (right.arg - left.arg <= precision) {
                 break;

@@ -19,7 +19,6 @@
 namespace Skygazing {
 
 struct Sun {
-public:
     static Sky::EclipticPosition getEclipticPosition(Julian julian) {
         Rads meanAnomaly = getSolarMeanAnomaly(julian);
         Rads equationOfTheCenter = 1.9148_deg * std::sin(meanAnomaly)
@@ -29,12 +28,15 @@ public:
         constexpr Rads kSkygazingOverfitting = 0.003;
         Rads eclipticLongitude = meanAnomaly + equationOfTheCenter + kEarthPerihelionLongitude + M_PI + kSkygazingOverfitting;
 
-        return {{0., normalizeHugeRads(eclipticLongitude)}, getDistanceFromMeanAnomaly(meanAnomaly)};
+        return {{0., normalizeRads(eclipticLongitude)}, getDistanceFromMeanAnomaly(meanAnomaly)};
+    }
+
+    static Rads getSolarMeanAnomalyFromJulianCenturies(Julian julianCentury) {
+        return Horner(julianCentury)(357.5291092_deg, 35999.0502909_deg); // [AA] (25.3), approximation
     }
 
     static Rads getSolarMeanAnomaly(Julian julian) {
-        constexpr double q_coeff = 0.0003032 / kJulianCentury / kJulianCentury;
-        return Horner(julian)(357.5291_deg, 0.98560028_deg, q_coeff);
+        return getSolarMeanAnomalyFromJulianCenturies(toJulianCenturies(julian));
     }
 
     static double getDistanceFromMeanAnomaly(Rads meanAnomaly) {
@@ -43,6 +45,10 @@ public:
         constexpr auto semimajor = 1.000001018;
         auto r = semimajor * (1 - eccentricity * eccentricity) / (1 + eccentricity * std::cos(meanAnomaly));
         return astronomicalUnit * r;
+    }
+
+    static constexpr Rads meanAngularSize() {
+        return 0.5_deg;
     }
 };
 
