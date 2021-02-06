@@ -2,6 +2,7 @@
 #define SKYGAZING_TEST_ANALYTICS_H
 
 #include "../skygazing_math.h"
+#include "../skygazing_time.h"
 
 #include <algorithm>
 #include <vector>
@@ -12,11 +13,12 @@
 namespace Skygazing {
 
 template <typename L, typename R>
-void assertEqualityImpl(const L &lhs, const R &rhs,
-                        const std::string &lhsString, const std::string &rhsString,
-                        double precision) {
+void assertEqualityImpl(const L &lhs, const R &rhs, const std::string &lhsString,
+        const std::string &rhsString, double precision)
+{
     if (std::abs(lhs - rhs) >= precision) {
-        std::cout << "FAIL: " << lhsString << " == " << lhs << " != " << rhs << " == " << rhsString << std::endl;
+        std::cout << "FAIL: " << lhsString << " == " << lhs << " != " << rhs << " == " << rhsString
+            << std::endl;
         abort();
     }
 }
@@ -24,18 +26,22 @@ void assertEqualityImpl(const L &lhs, const R &rhs,
 template <typename T>
 void assertSmallImpl(const T &x, const std::string &xString, double precision) {
     if (std::abs(x) > precision) {
-        std::cout << "FAIL: std::abs(" << xString << ") = " << std::abs(x) << " > " << precision << std::endl;
+        std::cout << "FAIL: std::abs(" << xString << ") = " << std::abs(x) << " > " << precision
+            << std::endl;
         abort();
     }
 }
 
-void outputExecutionTimeMessage(Seconds executionStart, const std::string &taskName) {
-    std::cout << taskName << " completed in " << std::setprecision(6) << getCurrentSeconds() - executionStart << "s\n";
+void outputExecutionTimeMessage(UTC executionStart, const std::string &taskName) {
+    std::cout << taskName << " completed in "
+        << std::setprecision(6) << getCurrentUTC() - executionStart << "s\n";
 }
 
 #define SKYGAZING_ASSERT_NEAR(L, R, P) assertEqualityImpl((L), (R), #L, #R, (P));
 #define SKYGAZING_ASSERT_SMALL(X, P) Skygazing::assertSmallImpl((X), #X, (P));
-#define SKYGAZING_TIME_EXECUTION(T) {auto t = Skygazing::getCurrentSeconds(); (T); Skygazing::outputExecutionTimeMessage(t, #T);}
+#define SKYGAZING_TIME_EXECUTION(T) {auto t = Skygazing::getCurrentUTC(); (T); \
+Skygazing::outputExecutionTimeMessage(t, #T);}
+#define SKYGAZING_NAME_COMMA_VAR(X) #X, (X)
 
 template <int decimalPlaces, typename Value>
 Value round(Value w) {
@@ -56,10 +62,11 @@ struct RandomDataGenerator {
     std::tm getRandomDate(int year) {
         std::tm date{0, 0, 0, 1, 0, year - 1900};
         auto seconds = timegm(&date);
-        constexpr int kMaxSecondsInTheYear = 366 * 24 * 3600 + 100;
+        constexpr int kMaxSecondsInAYear = kMaxDaysInAYear * kHoursInDay * kSecondsInDay;
 
         while (true) {
-            time_t secondsOfTheYear = std::uniform_int_distribution<time_t>(0, kMaxSecondsInTheYear)(generator);
+            time_t secondsOfTheYear =
+                std::uniform_int_distribution<time_t>(0, kMaxSecondsInAYear)(generator);
             time_t newTime = seconds + secondsOfTheYear;
             std::tm newDate = *gmtime(&newTime);
             if (newDate.tm_year == date.tm_year) {
@@ -81,40 +88,10 @@ struct RandomDataGenerator {
 };
 
 template <typename Value = double>
-class MinMaxWatcher {
-public:
-    explicit MinMaxWatcher(std::string name) : name_(std::move(name)) {}
-
-    void account(Value value) {
-        ++count_;
-        squareSum_ += value * value;
-        max_ = std::max(max_, value);
-        min_ = std::min(min_, value);
-    }
-
-    void dump() {
-        Value mse = squareSum_ / count_;
-        std::cout << name_ << " minmax: [" << min_ << ", " << max_ << "], radius = " << max_ - min_ << " rmsd = "
-                  << std::sqrt(mse) << std::endl;
-    }
-
-private:
-    const std::string name_;
-    Value max_ = std::numeric_limits<Value>::min();
-    Value min_ = std::numeric_limits<Value>::max();
-    int count_ = 0;
-    Value squareSum_ = 0;
-};
-
-template <typename Value = double>
 class StatisticsWatcher {
 public:
     StatisticsWatcher(std::string name, std::vector<Value> &&quantiles)
             : name_(std::move(name)), quantiles_(std::move(quantiles)) {}
-
-    void setQuantiles(std::vector<Value> &&quantiles) {
-        std::exchange(quantiles_, quantiles);
-    }
 
     void account(Value value) {
         samples_.push_back(value);
@@ -130,7 +107,7 @@ public:
         constexpr int decimalPoints = 4;
         std::cout << std::setw(width) << "min";
         for (auto q : quantiles_) {
-            std::cout << std::setw(width) << std::setprecision(width - 2) << q;
+            std::cout << std::setw(width) << std::setprecision(width - 6) << q;
         }
         std::cout << std::setw(width) << "max\n";
         std::sort(samples_.begin(), samples_.end());
@@ -141,8 +118,11 @@ public:
             std::cout << sep << std::setw(precision) << std::setprecision(precision - 2)
                       << round<decimalPoints>(samples_.at(index));
         }
-        std::cout << sep << std::setw(precision) << round<decimalPoints>(samples_.back()) << std::endl;
-        Value squareSum = std::accumulate(samples_.begin(), samples_.end(), Value{}, [](Value sum, Value next) {
+        std::cout << sep << std::setw(precision) << round<decimalPoints>(samples_.back())
+            << std::endl;
+        Value squareSum = std::accumulate(
+                samples_.begin(), samples_.end(), Value{}, [](Value sum, Value next)
+        {
             return sum + next * next;
         });
         std::cout << "span: " << samples_.back() - samples_.front() << std::endl;
@@ -169,7 +149,9 @@ struct StatisticsAggregator {
         account(name + " diff", Skygazing::degreesFromRads(diff));
     }
 
-    void accountForHaversineDistance(const std::string &name, const Coordinates &lhs, const Coordinates &rhs) {
+    void accountForHaversineDistance(const std::string &name,
+            const Coordinates &lhs, const Coordinates &rhs)
+    {
         accountForRadsDiff(name , haversineDistance(lhs, rhs), 0.);
     }
 

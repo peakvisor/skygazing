@@ -12,6 +12,9 @@
 namespace Skygazing {
 
 struct Moon {
+    static constexpr Rads meanAngularSize() { return 0.5_deg; }
+    static constexpr Days approxDayLength() { return 1.0345; }
+
     struct MoonDetails {
         double geocentricElongation;
         double angle;
@@ -20,20 +23,23 @@ struct Moon {
         double crescentApparentRotation;
     };
 
-    static MoonDetails getMoonDetails(const Sky::CelestialObjectObservation &moon, const Sky::CelestialObjectObservation &sun) {
+    static MoonDetails getMoonDetails(const Sky::CelestialObjectObservation &moon,
+            const Sky::CelestialObjectObservation &sun)
+    {
         MoonDetails details{};
 
         double elongation = Sky::getGeocentricElongation(sun.equatorial, moon.equatorial);
         details.geocentricElongation = elongation;
 
-        double inc = std::atan2(sun.distance * std::sin(elongation), moon.distance - sun.distance * std::cos(elongation));
+        double inc = std::atan2(sun.distance * std::sin(elongation),
+            moon.distance - sun.distance * std::cos(elongation));
         details.fraction = (1 + std::cos(inc)) / 2;
 
         auto [sunDec, sunRa] = sun.equatorial;
-        auto [moonDec, moonRa] = moon.equatorial;
-        details.angle = std::atan2(
-                cos(sunDec) * std::sin(sunRa - moonRa),
-                std::sin(sunDec) * std::cos(moonDec) - std::cos(sunDec) * std::sin(moonDec) * std::cos(sunRa - moonRa));
+        auto [dec, ra] = moon.equatorial;
+        details.angle = std::atan2(cos(sunDec) * std::sin(sunRa - ra),
+            std::sin(sunDec) * std::cos(dec)
+                - std::cos(sunDec) * std::sin(dec) * std::cos(sunRa - ra));
 
         details.phase = 0.5 + 0.5 * inc * (details.angle < 0 ? -1 : 1) / M_PI;
         details.crescentApparentRotation = getCrescentApparentRotation(moon, sun, details.phase);
@@ -41,8 +47,7 @@ struct Moon {
     }
 
     static inline Rads getCrescentApparentRotation(const Sky::CelestialObjectObservation &moon,
-                                                   const Sky::CelestialObjectObservation &sun,
-                                                   double moonPhase)
+            const Sky::CelestialObjectObservation &sun, double moonPhase)
     {
         auto b = M_PI_2 - moon.horizontal.lat, c = M_PI_2 - sun.horizontal.lat;
         auto a = haversineDistance(moon.horizontal, sun.horizontal);
@@ -62,72 +67,89 @@ struct Moon {
         return rotation;
     }
 
-    // [AA] chapter 47
-    static Sky::EclipticPosition getEclipticPosition(Julian julian) {
-        Julian julianCenturies = toJulianCenturies(julian);
-        auto h = Horner(julianCenturies);
-        Rads meanLng = normalizeHugeRads(h(218.3164477_deg, 481267.88123421_deg, -0.0015786_deg, 1_deg / 538841, -1_deg / 65194000));
-
-        BaseParameter base = baseParameterFromJulianCenturies(julianCenturies);
-        Rads A1 = h(119.75_deg, 131.849_deg);
-        Rads A2 = h(53.09_deg, 479264.29_deg);
-        Rads A3 = h(313.45_deg, 481266.484_deg);
-        double eccentricityMultiplier = h(1, -0.002516, -0.0000074);
-        std::array<double, 3> ePowers{1, eccentricityMultiplier, eccentricityMultiplier * eccentricityMultiplier};
-
-        Rads lngDelta =
-            3958 * std::sin(A1) + 1962 * std::sin(meanLng - base.moonArgumentOfLatitude) + 318 * std::sin(A2);
-        double distanceDelta = 0;
-        Rads lat =
-            -2235 * std::sin(meanLng) + 382 * std::sin(A3) + 175 * std::sin(A1 - base.moonArgumentOfLatitude)
-            + 175 * std::sin(A1 + base.moonArgumentOfLatitude) + 127 * std::sin(meanLng - base.moonMeanAnomaly)
-            - 115 * std::sin(meanLng + base.moonMeanAnomaly);
-
-        for (const auto &coeff : longitudeCoeffs) {
-            double a = base.dot(coeff);
-            lngDelta += coeff.sin * std::sin(a) * ePowers[coeff.eccentricityPower()];
-            distanceDelta += coeff.cos * std::cos(a) * ePowers[coeff.eccentricityPower()];
-        }
-
-        for (const auto &coeff : latitudeCoeffs) {
-            double b = base.dot(coeff);
-            lat += coeff.sin * std::sin(b) * ePowers[coeff.eccentricityPower()];
-        }
-        lat *= 1e-6_deg;
-        lngDelta *= 1e-6_deg;
-        return {
-            {normalizeHugeRads(lat), normalizeHugeRads(meanLng + lngDelta)},
-            385000560 + distanceDelta
-        };
-    }
-
-    static constexpr Rads meanAngularSize() { // TODO: fix magic number
-        return -1.15_deg;
-    }
-
     struct BaseParameter {
         double meanElongation;
         double solarMeanAnomaly;
         double moonMeanAnomaly;
         double moonArgumentOfLatitude;
 
-        constexpr int eccentricityPower() const {
-            return std::abs(static_cast<int>(solarMeanAnomaly));
+        constexpr size_t eccentricityPower() const {
+            auto k = static_cast<int>(solarMeanAnomaly);
+            return k > 0 ? +k : -k; // aka constexpr std::abs
         }
 
-        double dot(const BaseParameter &other) const {
-            return meanElongation * other.meanElongation + solarMeanAnomaly * other.solarMeanAnomaly
-                + moonMeanAnomaly * other.moonMeanAnomaly + moonArgumentOfLatitude * other.moonArgumentOfLatitude;
+        template <typename Container>
+        constexpr static bool validateEccentricityPowers(const Container &coeffs, size_t limit) {
+            for (auto &coef : coeffs) {
+                if (coef.eccentricityPower() >= limit) { return false; }
+            }
+            return true;
+        }
+
+        constexpr double dot(const BaseParameter &other) const {
+            return meanElongation * other.meanElongation
+                + solarMeanAnomaly * other.solarMeanAnomaly
+                + moonMeanAnomaly * other.moonMeanAnomaly
+                + moonArgumentOfLatitude * other.moonArgumentOfLatitude;
         }
     };
 
-    static BaseParameter baseParameterFromJulianCenturies(Julian julianCenturies) {
+    // [AA] chapter 47
+    static Sky::EclipticPosition getEclipticPosition(TT tt) {
+        auto julianCenturies = toJulianCenturies(tt);
+        auto h = Horner(julianCenturies);
+
+        auto meanLng = normalizeHugeRads(h(218.3164477_deg, 481267.88123421_deg, -0.0015786_deg,
+            1_deg / 538841, -1_deg / 65194000));
+        auto base = baseParameterFromJulianCenturies(julianCenturies);
+        auto A1 = h(119.75_deg, 131.849_deg);
+        auto A2 = h(53.09_deg, 479264.29_deg);
+        auto A3 = h(313.45_deg, 481266.484_deg);
+        auto eccentricityMultiplier = h(1, -0.002516, -0.0000074);
+        std::array ePowers{1.0, eccentricityMultiplier,
+            eccentricityMultiplier * eccentricityMultiplier};
+        static_assert(decltype(base)::validateEccentricityPowers(latCoeffs, std::size(ePowers)),
+            "Unexpected lat coefficient");
+        static_assert(decltype(base)::validateEccentricityPowers(lngCoeffs, std::size(ePowers)),
+            "Unexpected lng coefficient");
+
+        auto distanceDelta = 0.0;
+        auto lngDelta = 3958 * std::sin(A1) + 1962 * std::sin(meanLng - base.moonArgumentOfLatitude)
+            + 318 * std::sin(A2);
+        auto lat = -2235 * std::sin(meanLng) + 382 * std::sin(A3)
+            + 175 * std::sin(A1 - base.moonArgumentOfLatitude)
+            + 175 * std::sin(A1 + base.moonArgumentOfLatitude)
+            + 127 * std::sin(meanLng - base.moonMeanAnomaly)
+            - 115 * std::sin(meanLng + base.moonMeanAnomaly);
+
+        for (auto &coeff : lngCoeffs) {
+            auto a = base.dot(coeff);
+            lngDelta += coeff.sin * std::sin(a) * ePowers[coeff.eccentricityPower()];
+            distanceDelta += coeff.cos * std::cos(a) * ePowers[coeff.eccentricityPower()];
+        }
+        for (auto &coeff : latCoeffs) {
+            auto b = base.dot(coeff);
+            lat += coeff.sin * std::sin(b) * ePowers[coeff.eccentricityPower()];
+        }
+
+        lngDelta *= 1e-6_deg;
+        lat *= 1e-6_deg;
+        return {
+            {normalizeHugeRads(lat), normalizeHugeRads(meanLng + lngDelta)},
+            385000560 + distanceDelta
+        };
+    }
+
+    static BaseParameter baseParameterFromJulianCenturies(JulianCenturies julianCenturies) {
         auto h = Horner(julianCenturies);
         return {
-            normalizeHugeRads(h(297.8501921_deg, 445267.1114034_deg, -0.0018819_deg, 1_deg / 545868, -1_deg / 113065000)),
+            normalizeHugeRads(h(297.8501921_deg, 445267.1114034_deg, -0.0018819_deg, 1_deg / 545868,
+                -1_deg / 113065000)),
             normalizeHugeRads(Sun::getSolarMeanAnomalyFromJulianCenturies(julianCenturies)),
-            normalizeHugeRads(h(134.9633964_deg, 477198.8675055_deg, 0.0087414_deg, 1_deg / 69699, -1_deg / 14712000)),
-            normalizeHugeRads(h(93.272095_deg, 483202.0175233_deg, -0.0036539_deg, -1_deg / 3526000, 1_deg / 863310000))
+            normalizeHugeRads(h(134.9633964_deg, 477198.8675055_deg, 0.0087414_deg, 1_deg / 69699,
+                -1_deg / 14712000)),
+            normalizeHugeRads(h(93.272095_deg, 483202.0175233_deg, -0.0036539_deg, -1_deg / 3526000,
+                1_deg / 863310000))
         };
     }
 
@@ -140,7 +162,7 @@ struct Moon {
         double sin;
     };
 
-    static constexpr std::array<LatitudeCoeff, 60> longitudeCoeffs{{
+    static constexpr std::array<LatitudeCoeff, 60> lngCoeffs{{
         {0, 0, 1, 0, 6288774, -20905355},
         {2, 0, -1, 0, 1274027, -3699111},
         {2, 0, 0, 0, 658314, -2955968},
@@ -217,8 +239,7 @@ struct Moon {
         {2, 0, -1, -2, 0, 8752}
     }};
 
-    // 0:D, 1:M, 2:Mʹ, 3:F, 4:sumb
-    static constexpr std::array<LongitudeCoeff, 60> latitudeCoeffs{{
+    static constexpr std::array<LongitudeCoeff, 60> latCoeffs{{
         {0, 0, 0, 1, 5128122},
         {0, 0, 1, 1, 280602},
         {0, 0, 1, -1, 277693},
