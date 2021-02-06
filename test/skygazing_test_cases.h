@@ -1,7 +1,7 @@
 #ifndef SKYGAZING_TEST_CASES_H
 #define SKYGAZING_TEST_CASES_H
 
-#include "../skygazing_math.h"
+#include "../lib/skygazing_math.h"
 
 #include <vector>
 

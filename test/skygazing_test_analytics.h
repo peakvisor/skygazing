@@ -1,8 +1,8 @@
 #ifndef SKYGAZING_TEST_ANALYTICS_H
 #define SKYGAZING_TEST_ANALYTICS_H
 
-#include "../skygazing_math.h"
-#include "../skygazing_time.h"
+#include "../lib/skygazing_math.h"
+#include "../lib/skygazing_time.h"
 
 #include <algorithm>
 #include <vector>

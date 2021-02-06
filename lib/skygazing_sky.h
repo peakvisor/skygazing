@@ -4,7 +4,7 @@
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
-#include "test/skygazing_test_analytics.h"
+#include "../test/skygazing_test_analytics.h"
 
 namespace Skygazing {
 
