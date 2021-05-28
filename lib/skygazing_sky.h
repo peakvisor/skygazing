@@ -150,8 +150,8 @@ struct Sky {
             std::sin(lat) * std::sin(declination)
             + std::cos(lat) * std::cos(declination) * std::cos(ha));
         Rads azimuth = std::atan2(
-                std::sin(ha),
-                std::cos(ha) * std::sin(lat) - std::tan(declination) * std::cos(lat));
+            std::sin(ha),
+            std::cos(ha) * std::sin(lat) - std::tan(declination) * std::cos(lat));
         return {normalizeRads(altitudeAngle), normalizeRads(azimuth)};
     }
 

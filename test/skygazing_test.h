@@ -21,12 +21,25 @@ struct Testing {
         const int kIterations = 1000;
         for (int year = 2017; year < 2030; ++year) {
             for (int i = 0; i < kIterations; ++i) {
+                TimestampFormatter<true, true, false> nonUnwindingFormatter;
+                TimestampFormatter<true, true, false> nonValidatingFormatter;
+
                 auto date = dataGenerator.getRandomDate(year);
-                Seconds seconds = tmToUTC(&date);
-                std::string dateString = dateStringFromUTC(seconds);
-                assert(dateString == dateStringFromUTC(seconds));
-                Julian terrestrialJulian = ttFromUTC(seconds);
-                SKYGAZING_ASSERT_SMALL(seconds - utcFromTT(terrestrialJulian), 1e-5);
+                auto utc = tmToUTC(&date);
+
+                auto dateString = dateStringFromUTC(utc);
+                auto utcFromString = utcFromDateString(dateString).value();
+                auto reconvertedDateString = dateStringFromUTC(utcFromString);
+                assert(utc == utcFromString);
+                assert(dateString == reconvertedDateString);
+
+                auto nonUnwindingDateString = nonUnwindingFormatter.stringFromUTC(utc);
+                auto nonValidatingDateString = nonValidatingFormatter.stringFromUTC(utc);
+                assert(dateString == nonUnwindingDateString);
+                assert(dateString == nonValidatingDateString);
+
+                Julian terrestrialJulian = ttFromUTC(utc);
+                SKYGAZING_ASSERT_SMALL(utc - utcFromTT(terrestrialJulian), 1e-5);
             }
         }
     }
@@ -39,9 +52,9 @@ struct Testing {
         for (int year = 2017; year < 2030; ++year) {
             for (int i = 0; i < iterationsPerYear; ++i) {
                 auto date = dataGenerator.getRandomDate(year);
-                Seconds seconds = tmToUTC(&date);
+                auto utc = tmToUTC(&date);
                 auto coordinates = dataGenerator.getRandomCoordinates(0, 89);
-                Sky::getTrajectoryCycleFromUTC<CelestialBody>(seconds, coordinates);
+                Sky::getTrajectoryCycleFromUTC<CelestialBody>(utc, coordinates);
             }
         }
     }
@@ -52,7 +65,7 @@ struct Testing {
     {
         StatisticsAggregator statistics;
         for (const auto &test : cases) {
-            auto seconds = utcFromDateString(test.dateString, test.timezone);
+            auto seconds = utcFromDateString(test.dateString, test.timezone).value();
             auto secondsShifted = seconds;
             auto result = func(secondsShifted, test.coordinates);
 
@@ -84,17 +97,20 @@ struct Testing {
         constexpr auto kRandomizeWindow = 0.4 * CelestialBody::approxDayLength() * kSecondsInDay;
         std::uniform_real_distribution<Seconds> shiftDistr(-kRandomizeWindow, kRandomizeWindow);
         for (const auto &test : cases) {
-            auto testRiseSeconds = utcFromDateString(test.riseDateString, test.timezone);
-            auto testTransitSeconds = utcFromDateString(test.transitDateString, test.timezone);
-            auto testSetSeconds = utcFromDateString(test.setDateString, test.timezone);
+            auto testRiseSeconds =
+                utcFromDateString(test.riseDateString, test.timezone).value();
+            auto testTransitSeconds =
+                utcFromDateString(test.transitDateString, test.timezone).value();
+            auto testSetSeconds =
+                utcFromDateString(test.setDateString, test.timezone).value();
             for (int i = 0; i < 10; ++i) {
                 auto testSeconds = testTransitSeconds + shiftDistr(gen);
                 auto trajectoryCycle = Sky::getTrajectoryCycleFromUTC<CelestialBody>(
                         testSeconds, test.coordinates);
 
-                Seconds riseDiff = (trajectoryCycle.getTodaysRiseUTC().value() - testRiseSeconds);
-                Seconds transitDiff = (trajectoryCycle.getTransitUTC() - testTransitSeconds);
-                Seconds setDiff = (trajectoryCycle.getTodaysSetUTC().value() - testSetSeconds);
+                auto riseDiff = trajectoryCycle.getTodaysRiseUTC().value() - testRiseSeconds;
+                auto transitDiff = trajectoryCycle.getTransitUTC() - testTransitSeconds;
+                auto setDiff = trajectoryCycle.getTodaysSetUTC().value() - testSetSeconds;
 
                 if (showStatistics) {
                     statistics.account(description + " riseDiff ", riseDiff);
@@ -112,7 +128,7 @@ struct Testing {
     static void printClosestHorizonCrossings(
             const CelestialTrajectoryTestData::SingleTimeCase &testCase)
     {
-        auto utc = utcFromDateString(testCase.dateString, testCase.timezone);
+        auto utc = utcFromDateString(testCase.dateString, testCase.timezone).value();
         auto firstSunriseAfterCurrentTransit =
             Sky::getClosestToCurrentTransitHorizonCrossingUTC<Sun>(
                 utc, testCase.coordinates, true, true);
@@ -133,7 +149,7 @@ struct Testing {
         std::cout << "Printing one point, dateString: " << testCase.dateString
             << " tz: " << testCase.timezone << " observer: "
             << testCase.coordinates.lat << ", " << testCase.coordinates.lng << std::endl;
-        UTC utc = utcFromDateString(testCase.dateString, testCase.timezone);
+        auto utc = utcFromDateString(testCase.dateString, testCase.timezone).value();
         auto cycle = Sky::getTrajectoryCycleFromUTC<Sun>(utc, testCase.coordinates);
         std::cout << "last sun nadir: "
                   << dateStringFromUTC(cycle.getBeginNadir(), testCase.timezone) << std::endl;
@@ -150,7 +166,7 @@ struct Testing {
     static void printAltitudeAngleSeries(
         const CelestialTrajectoryTestData::SingleTimeCase &testCase, Seconds freq, int count)
     {
-        Seconds seconds = utcFromDateString(testCase.dateString, testCase.timezone);
+        Seconds seconds = utcFromDateString(testCase.dateString, testCase.timezone).value();
         for (int i = -count / 2; i < count / 2; ++i) {
             auto s = seconds + freq * i;
             auto hz = Sky::getHorizontalDegreesCoordinates<Sun>(s, testCase.coordinates);
@@ -160,7 +176,7 @@ struct Testing {
 
     template <typename CelestialBody>
     static void printTrasitShifts(const CelestialTrajectoryTestData::SingleTimeCase &testCase) {
-        auto seconds = utcFromDateString(testCase.dateString, testCase.timezone);
+        auto seconds = utcFromDateString(testCase.dateString, testCase.timezone).value();
         auto startTransit = *Sky::getTransitUTC<CelestialBody>(seconds, testCase.coordinates);
         auto secondsDay = kSecondsInDay * CelestialBody::approxDayLength();
 
@@ -238,6 +254,6 @@ struct Testing {
     }
 };
 
-}
+} // namespace Skygazing
 
 #endif // SKYGAZING_TESTS_H
