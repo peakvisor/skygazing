@@ -4,7 +4,7 @@
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
-#include "../test/skygazing_test_analytics.h"
+//#include "../test/skygazing_test_analytics.h"
 
 namespace Skygazing {
 
@@ -17,8 +17,9 @@ struct Earth {
 struct Sky {
     static constexpr double kAstronomicalUnit = 149597870691.;
 
-    static constexpr Days kTimesFindingPrecision = 1. / kSecondsInDay;
+    static constexpr Days kTimesFindingPrecision = 10. / kSecondsInDay;
     static constexpr Days kTimesFindingStep = 300. / kSecondsInDay;
+    static constexpr Julian kTransitHalfWindow = 13 / kHoursInDay;
 
     struct EclipticPosition {
         Coordinates coordinates;
@@ -186,6 +187,84 @@ struct Sky {
         double cosGeocentricElongation = std::sin(sunEquatorial.lat) * std::sin(dec)
             + std::cos(sunEquatorial.lat) * std::cos(dec) * std::cos(sunEquatorial.lng - ra);
         return std::acos(clamp(cosGeocentricElongation, 1.));
+    }
+
+    struct NotableTimesInSeconds {
+        std::optional<Seconds> rise;
+        std::optional<Seconds> transit;
+        std::optional<Seconds> set;
+    };
+
+    struct NotableTimesInTerrestrialTime {
+        std::optional<Julian> rise;
+        std::optional<Julian> transit;
+        std::optional<Julian> set;
+
+        NotableTimesInSeconds toSeconds() const {
+            return {utcFromJulian(rise.value()), utcFromJulian(transit.value()), utcFromJulian(set.value())};
+        }
+    };
+
+    template <typename CelestialBody>
+    static std::optional<Julian> getTransitInTerrestrialFromTerrestrial(Julian terrestrialJulian,
+                                                                        const DegreesCoordinates &observer)
+    {
+        auto getAltitudeAngle = [&observer](Julian julian) {
+            auto observation = Sky::observeInTT<CelestialBody>(julian, observer);
+            return observation.altitudeAngle();
+        };
+        auto altitudeAngleAnalyzer = FunctionAnalyzer{std::move(getAltitudeAngle)};
+        auto maxSample = altitudeAngleAnalyzer.gradientWalkToExtremum(terrestrialJulian - kTransitHalfWindow,
+                                                       terrestrialJulian + kTransitHalfWindow,
+                                                       kTimesFindingStep, kTimesFindingPrecision);
+        if (maxSample) {
+            return maxSample->arg;
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    template <typename CelestialBody>
+    static std::optional<Seconds> getTransit(Seconds seconds, const DegreesCoordinates &observer) {
+        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(julianFromUTC(seconds), observer);
+        if (transit) {
+            transit = secondsFromTerrestrialJulian(*transit);
+        }
+        return transit;
+    }
+
+    template <typename CelestialBody>
+    static NotableTimesInTerrestrialTime getNotableTimesInTerrestrialTime(Seconds seconds, const DegreesCoordinates &observer) {
+        Julian someJulianAtTheDate = julianFromUTC(seconds);
+
+        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(someJulianAtTheDate, observer);
+        if (transit.has_value()) {
+            auto upperEdgeAltitudeAngleAnalyzer = FunctionAnalyzer{[&observer](Julian julian) {
+                auto observation = Sky::observeInTT<CelestialBody>(julian, observer);
+                return observation.altitudeAngle() + CelestialBody::meanAngularSize() / 2;
+            }};
+            auto rise = upperEdgeAltitudeAngleAnalyzer.getSignChangeToPositive(*transit - kTransitHalfWindow, *transit,
+                                                                                kTimesFindingStep, kTimesFindingPrecision);
+            auto set = upperEdgeAltitudeAngleAnalyzer.getSignChangeToPositive(*transit + kTransitHalfWindow, *transit,
+                                                                               kTimesFindingStep, kTimesFindingPrecision);
+            return {rise, transit, set};
+        }
+        return {};
+    }
+
+    template <typename CelestialBody>
+    static NotableTimesInSeconds getTimes(Seconds seconds, const DegreesCoordinates &observer) {
+        return getNotableTimesInTerrestrialTime<CelestialBody>(seconds, observer).toSeconds();
+    }
+
+    template <typename CelestialBody>
+    static std::optional<Seconds> getSet(Seconds seconds, const DegreesCoordinates &observer) {
+        return getTimes<CelestialBody>(seconds, observer).set;
+    }
+
+    template <typename CelestialBody>
+    static std::optional<Seconds> getRise(Seconds seconds, const DegreesCoordinates &observer) {
+        return getTimes<CelestialBody>(seconds, observer).rise;
     }
 
     template <typename CelestialBody, bool switchToFindingNadir = false>

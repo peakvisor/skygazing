@@ -4,6 +4,7 @@
 #include "../lib/skygazing_math.h"
 #include "../lib/skygazing_time.h"
 
+#include <random>
 #include <algorithm>
 #include <vector>
 #include <unordered_map>

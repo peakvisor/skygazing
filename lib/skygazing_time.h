@@ -1,6 +1,7 @@
 #ifndef SKYGAZING_TIME_H
 #define SKYGAZING_TIME_H
 
+#include <array>
 #include <sstream>
 #include <iomanip>
 #include <chrono>
@@ -27,7 +28,7 @@ constexpr Days kDaysFrom1970To2000 = 2451545 - 2440588;
 constexpr Days kJulianCentury = 36525;
 constexpr Days kMaxDaysInAYear = 366;
 
-UTC getCurrentUTC() {
+inline UTC getCurrentUTC() {
     auto timePointNow = std::chrono::high_resolution_clock::now().time_since_epoch();
     auto durationNow = std::chrono::duration_cast<std::chrono::milliseconds>(timePointNow);
     constexpr double kPrecision = 1.e-3;
