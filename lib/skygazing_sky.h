@@ -201,7 +201,7 @@ struct Sky {
         std::optional<Julian> set;
 
         NotableTimesInSeconds toSeconds() const {
-            return {utcFromJulian(rise.value()), utcFromJulian(transit.value()), utcFromJulian(set.value())};
+            return {utcFromTT(rise), utcFromTT(transit), utcFromTT(set)};
         }
     };
 
