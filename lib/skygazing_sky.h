@@ -4,7 +4,6 @@
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
-//#include "../test/skygazing_test_analytics.h"
 
 namespace Skygazing {
 
@@ -17,9 +16,8 @@ struct Earth {
 struct Sky {
     static constexpr double kAstronomicalUnit = 149597870691.;
 
-    static constexpr Days kTimesFindingPrecision = 10. / kSecondsInDay;
+    static constexpr Days kTimesFindingPrecision = 1. / kSecondsInDay;
     static constexpr Days kTimesFindingStep = 300. / kSecondsInDay;
-    static constexpr Julian kTransitHalfWindow = 13 / kHoursInDay;
 
     struct EclipticPosition {
         Coordinates coordinates;
@@ -42,7 +40,8 @@ struct Sky {
                 , horizontal{getHorizontalCoordinatesFromHourAngle(
                     topocentricHourAngle,
                     observer.lat, topocentric.lat)}
-                , distance(eclipticPosition.distance) {}
+                , geocentricDistance(eclipticPosition.distance)
+                , distance(getTopocentricDistance(horizontal.lat, geocentricDistance)) {}
 
         Rads declination() const { return equatorial.lat; }
         Rads rightAscension() const { return equatorial.lng; }
@@ -71,13 +70,14 @@ struct Sky {
         Coordinates topocentric;
         double topocentricHourAngle;
         Coordinates horizontal;
-        double distance;
+        double geocentricDistance;
+        double distance; // topocentric
         std::optional<double> parallacticAngle;
     };
 
     template <typename CelestialObject>
     static CelestialObjectObservation observeInTT(TT tt, const DegreesCoordinates &observer,
-            bool addRefraction = false)
+            bool addRefraction = true)
     {
         auto eclipticPosition = CelestialObject::getEclipticPosition(tt);
         auto observation = CelestialObjectObservation(tt, eclipticPosition, observer);
@@ -87,7 +87,7 @@ struct Sky {
 
     template <typename CelestialObject>
     static CelestialObjectObservation observe(Seconds seconds,
-            const DegreesCoordinates &observer, bool addRefraction = false)
+            const DegreesCoordinates &observer, bool addRefraction = true)
     {
         TT tt = ttFromUTC(seconds);
         auto obseration = observeInTT<CelestialObject>(tt, observer);
@@ -184,87 +184,18 @@ struct Sky {
     {
         auto dec = objectEquatorial.lat;
         auto ra = objectEquatorial.lng;
-        double cosGeocentricElongation = std::sin(sunEquatorial.lat) * std::sin(dec)
+        auto cosGeocentricElongation = std::sin(sunEquatorial.lat) * std::sin(dec)
             + std::cos(sunEquatorial.lat) * std::cos(dec) * std::cos(sunEquatorial.lng - ra);
         return std::acos(clamp(cosGeocentricElongation, 1.));
     }
 
-    struct NotableTimesInSeconds {
-        std::optional<Seconds> rise;
-        std::optional<Seconds> transit;
-        std::optional<Seconds> set;
-    };
+    static double getTopocentricDistance(double altitudeAngle, double geocentricDistance) {
+        auto cosine = std::cos(altitudeAngle + M_PI / 2);
+        auto c = geocentricDistance;
+        auto b = Earth::equatorialRadius;
 
-    struct NotableTimesInTerrestrialTime {
-        std::optional<Julian> rise;
-        std::optional<Julian> transit;
-        std::optional<Julian> set;
-
-        NotableTimesInSeconds toSeconds() const {
-            return {utcFromTT(rise), utcFromTT(transit), utcFromTT(set)};
-        }
-    };
-
-    template <typename CelestialBody>
-    static std::optional<Julian> getTransitInTerrestrialFromTerrestrial(Julian terrestrialJulian,
-                                                                        const DegreesCoordinates &observer)
-    {
-        auto getAltitudeAngle = [&observer](Julian julian) {
-            auto observation = Sky::observeInTT<CelestialBody>(julian, observer);
-            return observation.altitudeAngle();
-        };
-        auto altitudeAngleAnalyzer = FunctionAnalyzer{std::move(getAltitudeAngle)};
-        auto maxSample = altitudeAngleAnalyzer.gradientWalkToExtremum(terrestrialJulian - kTransitHalfWindow,
-                                                       terrestrialJulian + kTransitHalfWindow,
-                                                       kTimesFindingStep, kTimesFindingPrecision);
-        if (maxSample) {
-            return maxSample->arg;
-        } else {
-            return std::nullopt;
-        }
-    }
-
-    template <typename CelestialBody>
-    static std::optional<Seconds> getTransit(Seconds seconds, const DegreesCoordinates &observer) {
-        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(julianFromUTC(seconds), observer);
-        if (transit) {
-            transit = secondsFromTerrestrialJulian(*transit);
-        }
-        return transit;
-    }
-
-    template <typename CelestialBody>
-    static NotableTimesInTerrestrialTime getNotableTimesInTerrestrialTime(Seconds seconds, const DegreesCoordinates &observer) {
-        Julian someJulianAtTheDate = julianFromUTC(seconds);
-
-        auto transit = getTransitInTerrestrialFromTerrestrial<CelestialBody>(someJulianAtTheDate, observer);
-        if (transit.has_value()) {
-            auto upperEdgeAltitudeAngleAnalyzer = FunctionAnalyzer{[&observer](Julian julian) {
-                auto observation = Sky::observeInTT<CelestialBody>(julian, observer);
-                return observation.altitudeAngle() + CelestialBody::meanAngularSize() / 2;
-            }};
-            auto rise = upperEdgeAltitudeAngleAnalyzer.getSignChangeToPositive(*transit - kTransitHalfWindow, *transit,
-                                                                                kTimesFindingStep, kTimesFindingPrecision);
-            auto set = upperEdgeAltitudeAngleAnalyzer.getSignChangeToPositive(*transit + kTransitHalfWindow, *transit,
-                                                                               kTimesFindingStep, kTimesFindingPrecision);
-            return {rise, transit, set};
-        }
-        return {};
-    }
-
-    template <typename CelestialBody>
-    static NotableTimesInSeconds getTimes(Seconds seconds, const DegreesCoordinates &observer) {
-        return getNotableTimesInTerrestrialTime<CelestialBody>(seconds, observer).toSeconds();
-    }
-
-    template <typename CelestialBody>
-    static std::optional<Seconds> getSet(Seconds seconds, const DegreesCoordinates &observer) {
-        return getTimes<CelestialBody>(seconds, observer).set;
-    }
-
-    template <typename CelestialBody>
-    static std::optional<Seconds> getRise(Seconds seconds, const DegreesCoordinates &observer) {
-        return getTimes<CelestialBody>(seconds, observer).rise;
+        // inverse law of cosines
+        return b * cosine + std::sqrt(b * b * (cosine * cosine - 1) + c * c);
     }
 
     template <typename CelestialBody, bool switchToFindingNadir = false>
@@ -334,7 +265,7 @@ struct Sky {
                 double bodySizeCorrection = 0) const
         {
             auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle](TT tt) {
-                auto observation = Sky::observeInTT<CelestialBody>(tt, observer);
+                auto observation = Sky::observeInTT<CelestialBody>(tt, observer, false);
                 observation.horizontal.lat += bodySizeCorrection;
                 observation.accountForRefraction();
                 return observation.altitudeAngle() - angle;

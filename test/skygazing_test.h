@@ -149,7 +149,17 @@ struct Testing {
         std::cout << "Printing one point, dateString: " << testCase.dateString
             << " tz: " << testCase.timezone << " observer: "
             << testCase.coordinates.lat << ", " << testCase.coordinates.lng << std::endl;
+
         auto utc = utcFromDateString(testCase.dateString, testCase.timezone).value();
+
+        auto moonObservation = Sky::observe<Moon>(utc, testCase.coordinates);
+        std::cout << std::setprecision(10) << std::endl;
+        std::cout << "moon azimuth " << degreesFromRads(moonObservation.azimuth()) << std::endl;
+        std::cout << "moon altitude angle " << degreesFromRads(moonObservation.altitudeAngle()) << std::endl;
+        std::cout << "moon geocentric distance " << moonObservation.geocentricDistance / 1000 << std::endl;
+        std::cout << "moon topocentric distance " << moonObservation.distance / 1000 << std::endl;
+        return;
+
         auto cycle = Sky::getTrajectoryCycleFromUTC<Sun>(utc, testCase.coordinates);
         std::cout << "last sun nadir: "
                   << dateStringFromUTC(cycle.getBeginNadir(), testCase.timezone) << std::endl;
@@ -241,7 +251,9 @@ struct Testing {
     }
 
     static void runAllTests(bool runAnalytics = false) {
+        printOnePoint({{64.15103, -21.93079}, "2022-08-22T18:00:00Z"s, 0});
         if (runAnalytics) { Testing::runAnalytics(); }
+
         SKYGAZING_TIME_EXECUTION(testTimeTransforms());
         SKYGAZING_TIME_EXECUTION(
             testCelestialTrajectory<Sun>(CelestialTrajectoryTestData::sunCases, "sun", 90));

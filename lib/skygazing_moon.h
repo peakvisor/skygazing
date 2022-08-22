@@ -31,8 +31,8 @@ struct Moon {
         double elongation = Sky::getGeocentricElongation(sun.equatorial, moon.equatorial);
         details.geocentricElongation = elongation;
 
-        double inc = std::atan2(sun.distance * std::sin(elongation),
-            moon.distance - sun.distance * std::cos(elongation));
+        double inc = std::atan2(sun.geocentricDistance * std::sin(elongation),
+            moon.geocentricDistance - sun.geocentricDistance * std::cos(elongation));
         details.fraction = (1 + std::cos(inc)) / 2;
 
         auto [sunDec, sunRa] = sun.equatorial;

@@ -29,10 +29,10 @@ struct AAPlus {
         sun.equatorial = {CAACoordinateTransformation::DegreesToRadians(aaEquatorial.Y),
             CAACoordinateTransformation::HoursToRadians(aaEquatorial.X)};
         auto rad = CAAEarth::RadiusVector(terrestrialJulian, highPrecision);
-        sun.distance = rad * kAU;
+        sun.geocentricDistance = rad * kAU;
         double Height = 0;
         const CAA2DCoordinate SunTopo = CAAParallax::Equatorial2Topocentric(aaEquatorial.X,
-            aaEquatorial.Y, sun.distance / kAU, -coordinates.lng, coordinates.lat,
+            aaEquatorial.Y, sun.geocentricDistance / kAU, -coordinates.lng, coordinates.lat,
             Height, terrestrialJulian);
         double AST = CAASidereal::ApparentGreenwichSiderealTime(julian);
         double LongtitudeAsHourAngle =
@@ -66,7 +66,7 @@ struct AAPlus {
         moon.equatorial = Coordinates{CAACoordinateTransformation::DegreesToRadians(Equatorial.Y),
             CAACoordinateTransformation::HoursToRadians(Equatorial.X)};
         auto moonRad = CAAMoon::RadiusVector(jd);
-        moon.distance = moonRad * 1000;
+        moon.geocentricDistance = moonRad * 1000;
 //        MoonRad /= 149597870.691; //Convert KM to AU
         auto Height = 0;
         const CAA2DCoordinate topocentric = CAAParallax::Equatorial2Topocentric(
@@ -130,7 +130,7 @@ void testSunObservation(int seed = 23, bool showStatistics = false) {
                 sgSun.topocentric, aaSun.topocentric));
             auto sunHorizontalDistance = degreesFromRads(haversineDistance(
                 sgSun.horizontal, aaSun.horizontal));
-            auto sunDistanceDiff = sgSun.distance - aaSun.distance;
+            auto sunDistanceDiff = sgSun.geocentricDistance - aaSun.geocentricDistance;
 
             if (showStatistics) {
                 statistics.account("sunEclipticDistance", sunEclipticDistance);
@@ -141,7 +141,7 @@ void testSunObservation(int seed = 23, bool showStatistics = false) {
                 statistics.accountForRadsDiff("sunHourAngleDiff",
                     sgSun.topocentricHourAngle, aaSun.topocentricHourAngle);
                 statistics.account(SKYGAZING_NAME_COMMA_VAR(sunDistanceDiff));
-                statistics.account(SKYGAZING_NAME_COMMA_VAR(sgSun.distance));
+                statistics.account(SKYGAZING_NAME_COMMA_VAR(sgSun.geocentricDistance));
             } else {
                 SKYGAZING_ASSERT_SMALL(sunEclipticDistance, 0.1);
                 SKYGAZING_ASSERT_SMALL(sunEquatorialDistance, 0.1);
@@ -178,7 +178,7 @@ void testMoonObservation(int seed, bool showStatistics = false) {
                 sgMoon.horizontal, aaMoon.horizontal));
             auto geocentricElongationDiff = degreesFromRads(normalizeRads(
                 sgMoonDetails.geocentricElongation - aaMoonDetails.geocentricElongation));
-            auto moonDistanceDiff = sgMoon.distance - aaMoon.distance;
+            auto moonDistanceDiff = sgMoon.geocentricDistance - aaMoon.geocentricDistance;
             SKYGAZING_ASSERT_SMALL(moonEclipticDistance, 0.01);
             SKYGAZING_ASSERT_SMALL(moonEquatorialDistance, 0.01);
             SKYGAZING_ASSERT_SMALL(moonHorizontalDistance, 0.1);
@@ -194,7 +194,7 @@ void testMoonObservation(int seed, bool showStatistics = false) {
                     sgMoon.getParallacticAngle(), aaMoon.parallacticAngle.value());
                 statistics.account("geocentricElongationDiff", geocentricElongationDiff);
                 statistics.account(SKYGAZING_NAME_COMMA_VAR(moonDistanceDiff));
-                statistics.account(SKYGAZING_NAME_COMMA_VAR(sgMoon.distance));
+                statistics.account(SKYGAZING_NAME_COMMA_VAR(sgMoon.geocentricDistance));
             }
         }
     }
