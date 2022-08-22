@@ -161,8 +161,8 @@ void testMoonObservation(int seed, bool showStatistics = false) {
             auto seconds = timegm(&date);
             auto observer = dataGenerator.getRandomCoordinates();
 
-            auto sgMoon = Sky::observe<Moon>(seconds, observer);
-            auto sgSun = Sky::observe<Sun>(seconds, observer);
+            auto sgMoon = Sky::observe<Moon>(seconds, observer, false);
+            auto sgSun = Sky::observe<Sun>(seconds, observer, false);
             auto sgMoonDetails = Moon::getMoonDetails(sgMoon, sgSun);
             sgMoon.accountForRefraction();
             auto [aaMoon, aaMoonDetails] = AAPlus::observeMoon(

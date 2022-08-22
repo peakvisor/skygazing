@@ -4,6 +4,7 @@
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
+#include <cassert>
 
 namespace Skygazing {
 
@@ -90,10 +91,7 @@ struct Sky {
             const DegreesCoordinates &observer, bool addRefraction = true)
     {
         TT tt = ttFromUTC(seconds);
-        auto obseration = observeInTT<CelestialObject>(tt, observer);
-        if (addRefraction) {
-            obseration.accountForRefraction();
-        }
+        auto obseration = observeInTT<CelestialObject>(tt, observer, addRefraction);
         return obseration;
     }
 
