@@ -36,13 +36,13 @@ struct Sky {
                 , equatorial{eclipticToEquatorial(ecliptic)}
                 , hourAngle{getLocalHourAngle(tt, observer.lng, equatorial.lng)}
                 , topocentric{getTopocentricCoordinates(equatorial, eclipticPosition.distance,
-                    observer, observerAltitude, hourAngle)}
+                    observer, observerAltitude, hourAngle)} // non-rotating earth ellispoid
                 , topocentricHourAngle{getLocalHourAngle(tt, observer.lng, topocentric.lng)}
                 , horizontal{getHorizontalCoordinatesFromHourAngle(
                     topocentricHourAngle,
                     observer.lat, topocentric.lat)}
                 , geocentricDistance(eclipticPosition.distance)
-                , distance(getTopocentricDistance(horizontal.lat, geocentricDistance)) {}
+                , distance(getDistanceFromObserver(horizontal.lat, geocentricDistance)) {}
 
         Rads declination() const { return equatorial.lat; }
         Rads rightAscension() const { return equatorial.lng; }
@@ -72,7 +72,7 @@ struct Sky {
         double topocentricHourAngle;
         Coordinates horizontal;
         double geocentricDistance;
-        double distance; // topocentric
+        double distance; // from observer
         std::optional<double> parallacticAngle;
     };
 
@@ -187,7 +187,7 @@ struct Sky {
         return std::acos(clamp(cosGeocentricElongation, 1.));
     }
 
-    static double getTopocentricDistance(double altitudeAngle, double geocentricDistance) {
+    static double getDistanceFromObserver(double altitudeAngle, double geocentricDistance) {
         auto cosine = std::cos(altitudeAngle + M_PI / 2);
         auto c = geocentricDistance;
         auto b = Earth::equatorialRadius;
