@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_TEST_ANALYTICS_H
-#define SKYGAZING_TEST_ANALYTICS_H
+#pragma once
 
 #include "../lib/skygazing_math.h"
 #include "../lib/skygazing_time.h"
@@ -169,5 +168,3 @@ struct StatisticsAggregator {
 };
 
 } // namespace Skygazing
-
-#endif

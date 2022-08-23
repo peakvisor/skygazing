@@ -1,6 +1,5 @@
 // [AA] "Astronomical Algorithms" 2nd edition by Jean Meeus (Willmann-Bell, Richmond) 1998.
-#ifndef SKYGAZING_OBSERVATION_H
-#define SKYGAZING_OBSERVATION_H
+#pragma once
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
@@ -389,6 +388,4 @@ struct Sky {
     }
 };
 
-}
-
-#endif //SKYGAZING_OBSERVATION_H
+} // namespace Skygazing

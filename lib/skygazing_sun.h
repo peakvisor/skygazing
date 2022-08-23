@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_SUN_H
-#define	SKYGAZING_SUN_H
+#pragma once
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
@@ -58,5 +57,3 @@ struct Sun {
 };
 
 } // namespace Skygazing
-
-#endif // SKYGAZING_SUN_H

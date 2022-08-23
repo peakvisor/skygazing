@@ -1,10 +1,7 @@
-#ifndef SKYGAZING_H
-#define SKYGAZING_H
+#pragma once
 
-#include "../lib/skygazing_math.h"
-#include "../lib/skygazing_time.h"
-#include "../lib/skygazing_sky.h"
-#include "../lib/skygazing_moon.h"
-#include "../lib/skygazing_sun.h"
-
-#endif // SKYGAZING_H
+#include "skygazing_math.h"
+#include "skygazing_time.h"
+#include "skygazing_sky.h"
+#include "skygazing_moon.h"
+#include "skygazing_sun.h"

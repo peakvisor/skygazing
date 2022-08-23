@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_MATH_H
-#define SKYGAZING_MATH_H
+#pragma once
 
 #include <iostream>
 #include <cmath>
@@ -216,5 +215,3 @@ struct FunctionAnalyzer {
 };
 
 } // namespace Skygazing
-
-#endif //SKYGAZING_MATH_H

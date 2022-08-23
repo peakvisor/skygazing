@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_MOON_H
-#define SKYGAZING_MOON_H
+#pragma once
 
 #include "skygazing_math.h"
 #include "skygazing_time.h"
@@ -318,5 +317,4 @@ struct Moon {
     }};
 };
 
-}
-#endif // SKYGAZING_MOON_H
+} // namespace Skygazing

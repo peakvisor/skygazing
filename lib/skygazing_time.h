@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_TIME_H
-#define SKYGAZING_TIME_H
+#pragma once
 
 #include <array>
 #include <sstream>
@@ -262,5 +261,3 @@ inline std::string dateStringFromUTC(UTC utc, int timezone = 0) {
 }
 
 } // namespace Skygazing
-
-#endif //SKYGAZING_TIME_H

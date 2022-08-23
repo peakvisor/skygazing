@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_TEST_CASES_H
-#define SKYGAZING_TEST_CASES_H
+#pragma once
 
 #include "../lib/skygazing_math.h"
 
@@ -8,6 +7,7 @@
 using std::literals::operator""s;
 
 namespace Skygazing {
+
 struct CelestialTrajectoryTestData {
     struct SingleTimeCase {
         DegreesCoordinates coordinates;
@@ -1608,5 +1608,5 @@ struct CelestialTrajectoryTestData {
         {{-33.8688, 151.2093}, "2020-12-31T06:20:30Z"s, 11}
     }};
 };
-}
-#endif //SKYGAZING_TEST_CASES_H
+
+} // namespace Skygazing

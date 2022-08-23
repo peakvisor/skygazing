@@ -1,5 +1,4 @@
-#ifndef SKYGAZING_TESTS_H
-#define SKYGAZING_TESTS_H
+#pragma once
 
 #undef NDEBUG
 #include <cassert>
@@ -7,7 +6,7 @@
 #include <chrono>
 #include <set>
 
-#include "../include/skygazing.h"
+#include "skygazing.h"
 #include "skygazing_test_analytics.h"
 #include "skygazing_test_cases.h"
 
@@ -274,5 +273,3 @@ struct Testing {
 };
 
 } // namespace Skygazing
-
-#endif // SKYGAZING_TESTS_H
