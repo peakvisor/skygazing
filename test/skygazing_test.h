@@ -109,7 +109,7 @@ struct Testing {
                         testSeconds, test.coordinates);
 
                 auto riseDiff = trajectoryCycle.getTodaysRiseUTC().value() - testRiseSeconds;
-                auto transitDiff = trajectoryCycle.getTransitUTC() - testTransitSeconds;
+                auto transitDiff = trajectoryCycle.getTransitUTC().value() - testTransitSeconds;
                 auto setDiff = trajectoryCycle.getTodaysSetUTC().value() - testSetSeconds;
 
                 if (showStatistics) {
@@ -158,15 +158,22 @@ struct Testing {
         std::cout << "moon altitude angle " << degreesFromRads(moonObservation.altitudeAngle()) << std::endl;
         std::cout << "moon geocentric distance " << moonObservation.geocentricDistance / 1000 << std::endl;
         std::cout << "moon topocentric distance " << moonObservation.distance / 1000 << std::endl;
-        return;
 
         auto cycle = Sky::getTrajectoryCycleFromUTC<Sun>(utc, testCase.coordinates);
-        std::cout << "last sun nadir: "
-                  << dateStringFromUTC(cycle.getBeginNadir(), testCase.timezone) << std::endl;
-        std::cout << "sun transit: "
-                  << dateStringFromUTC(cycle.getTransitUTC(), testCase.timezone) << std::endl;
-        std::cout << "next sun nadir: "
-                  << dateStringFromUTC(cycle.getEndNadir(), testCase.timezone) << std::endl;
+        if (!cycle.isValid()) {
+            std::cout << "invalid cycle\n";
+        } else {
+            std::cout << "last sun nadir: "
+                      << dateStringFromUTC(*cycle.getBeginNadir(), testCase.timezone) << std::endl;
+            std::cout << "sun transit: "
+                      << dateStringFromUTC(*cycle.getTransitUTC(), testCase.timezone) << std::endl;
+            std::cout << "next sun nadir: "
+                      << dateStringFromUTC(*cycle.getEndNadir(), testCase.timezone) << std::endl;
+            auto notableTimes = Sky::getNotableTimes<Sun>(utc, testCase.coordinates);
+            assert(notableTimes.transit.has_value());
+            assert(*notableTimes.transit == *cycle.getTransitUTC());
+            std::cout << "todays sunrise: " << *notableTimes.rise << " sunset: " << *notableTimes.set << std::endl;
+        }
         auto horizontalCoordinates =
             Sky::getHorizontalDegreesCoordinates<Sun>(utc, testCase.coordinates);
         std::cout << "altitude angle: " << horizontalCoordinates.lat
@@ -211,13 +218,13 @@ struct Testing {
                 try {
                     auto trajectoryCycle = Sky::getTrajectoryCycleFromUTC<CelestialBody>(
                             seconds, observer);
-                    auto firstHalfHours = (trajectoryCycle.getTransitUTC()
-                        - trajectoryCycle.getBeginNadir()) / 3600;
+                    auto firstHalfHours = (trajectoryCycle.getTransitUTC().value()
+                        - trajectoryCycle.getBeginNadir().value()) / 3600;
                     auto dayLengthHours = trajectoryCycle.getLengthDays() * kHoursInDay;
 
                     auto prevCycle = trajectoryCycle.getShiftedCycle(-1);
-                    auto nadirDayHours = (trajectoryCycle.getTransitUTC()
-                        - prevCycle.getTransitUTC()) / 3600.;
+                    auto nadirDayHours = (trajectoryCycle.getTransitUTC().value()
+                        - prevCycle.getTransitUTC().value()) / 3600.;
 
                     statistics.account(SKYGAZING_NAME_COMMA_VAR(dayLengthHours));
                     statistics.account(SKYGAZING_NAME_COMMA_VAR(nadirDayHours));

@@ -19,6 +19,7 @@ struct Sky {
 
     static constexpr Days kTimesFindingPrecision = 1. / kSecondsInDay;
     static constexpr Days kTimesFindingStep = 300. / kSecondsInDay;
+    static constexpr int kCyclesToSearchForSetRise = 3;
 
     struct EclipticPosition {
         Coordinates coordinates;
@@ -197,7 +198,7 @@ struct Sky {
     }
 
     template <typename CelestialBody, bool switchToFindingNadir = false>
-    static TT getTransitTT(TT tt, const DegreesCoordinates &observer) {
+    static std::optional<TT> getTransitTT(TT tt, const DegreesCoordinates &observer) {
         auto getAltitudeAngle = [&observer](TT tt) {
             auto observation = Sky::observeInTT<CelestialBody>(tt, observer, true);
             return observation.altitudeAngle();
@@ -208,13 +209,15 @@ struct Sky {
                 tt, kMaxDaysInAYear / 2,
                 kTimesFindingStep, kTimesFindingPrecision);
         if (!maxSample) {
-            throw std::logic_error("unable to find transit or nadir("
-                + std::to_string(switchToFindingNadir) + ")"); }
+            return std::nullopt;
+        }
         return maxSample->arg;
     }
 
     template <typename CelestialBody>
-    static TT nadirFromTransitTT(TT transit, const DegreesCoordinates &observer, bool nextNadir) {
+    static std::optional<TT> nadirFromTransitTT(TT transit, const DegreesCoordinates &observer,
+            bool nextNadir)
+    {
         auto mult = nextNadir ? 1 : -1;
         return getTransitTT<CelestialBody, true>(
             transit + mult * CelestialBody::approxDayLength() / 2, observer);
@@ -230,38 +233,46 @@ struct Sky {
         static constexpr double kUpperEdgeBodySizeCorrection = CelestialBody::meanAngularSize() / 2;
 
         DegreesCoordinates observer;
-        TT beginNadir{};
-        TT transit{};
-        TT endNadir{};
+        std::optional<TT> beginNadir;
+        std::optional<TT> transit{};
+        std::optional<TT> endNadir{};
 
         TrajectoryCycle(TT tt, const DegreesCoordinates &observer) : observer(observer) {
             transit = getTransitTT<CelestialBody>(tt, observer);
-            beginNadir = nadirFromTransitTT<CelestialBody>(transit, observer, false);
-            endNadir = nadirFromTransitTT<CelestialBody>(transit, observer, true);
+            if (!transit.has_value()) { return; }
+            beginNadir = nadirFromTransitTT<CelestialBody>(*transit, observer, false);
+            endNadir = nadirFromTransitTT<CelestialBody>(*transit, observer, true);
         }
 
-
+        TrajectoryCycle() noexcept = default;
         TrajectoryCycle(TrajectoryCycle &&other) noexcept = default;
         TrajectoryCycle(const TrajectoryCycle &other) = default;
         TrajectoryCycle &operator=(TrajectoryCycle &&other) noexcept = default;
         TrajectoryCycle(
-                const DegreesCoordinates &observer, TT firstNadir, TT transit, TT secondNadir)
+                const DegreesCoordinates &observer, std::optional<TT> firstNadir,
+                std::optional<TT> transit, std::optional<TT> secondNadir)
                 : observer(observer) , beginNadir(firstNadir)
                 , transit(transit), endNadir(secondNadir) {}
 
         TrajectoryCycle getShiftedCycle(int shiftCycles) const {
+            if (!isValid()) { return {}; }
             auto shiftedTransit = getTransitTT<CelestialBody>(
-                transit + shiftCycles * CelestialBody::approxDayLength(), observer);
+                *transit + shiftCycles * CelestialBody::approxDayLength(), observer);
             auto shiftedFirstNadir = shiftCycles == 1 ? endNadir
-                : nadirFromTransitTT<CelestialBody>(transit, observer, false);
+                : nadirFromTransitTT<CelestialBody>(*transit, observer, false);
             auto shiftedSecondNadir = shiftCycles == -1 ? beginNadir
-                : nadirFromTransitTT<CelestialBody>(transit, observer, true);
+                : nadirFromTransitTT<CelestialBody>(*transit, observer, true);
             return {observer, shiftedFirstNadir, shiftedTransit, shiftedSecondNadir};
+        }
+
+        bool isValid() const {
+            return transit.has_value() && beginNadir.has_value() && endNadir.has_value();
         }
 
         std::optional<TT> getTTFromAngle(Rads angle, bool firstHalfOfTheCycle,
                 double bodySizeCorrection = 0) const
         {
+            if (!isValid()) { return std::nullopt; }
             auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle](TT tt) {
                 auto observation = Sky::observeInTT<CelestialBody>(tt, observer, false);
                 observation.horizontal.lat += bodySizeCorrection;
@@ -270,8 +281,8 @@ struct Sky {
             }};
 
             return altitudeAngleAnalyzer.getSignChangeToPositive(
-                firstHalfOfTheCycle ? beginNadir : endNadir,
-                transit, kTimesFindingPrecision, 100);
+                firstHalfOfTheCycle ? *beginNadir : *endNadir,
+                *transit, kTimesFindingPrecision, 100);
         }
 
         std::optional<TT> getClosestTTWithRadsAltitudeAngle(Rads angle,
@@ -279,17 +290,17 @@ struct Sky {
         {
             auto trajectory = *this;
             int step = shiftUpTo > 0 ? 1 : -1;
-            int dbgSanityCheck = kMaxDaysInAYear;
+            int sanityCheck = kMaxDaysInAYear;
             while (true) {
-                if (dbgSanityCheck-- <= 0) {
-                    throw std::logic_error("looped in getClosestTTWithAltitudeAngle");
-                }
+                if (!trajectory.isValid()) { return std::nullopt; }
+                if (sanityCheck-- <= 0) { return std::nullopt; }
                 auto tt = trajectory.getTTFromAngle(angle, firstHalfOfTheCycle, bodySizeCorrection);
                 if (tt) { return *tt; }
                 if (shiftUpTo == 0) { return std::nullopt; }
                 shiftUpTo -= step;
                 trajectory = trajectory.getShiftedCycle(step);
             }
+            return std::nullopt;
         }
 
         inline std::optional<UTC> getClosestUTCWithDegreesAltitudeAngle(Degrees angle,
@@ -301,11 +312,13 @@ struct Sky {
         }
 
         inline std::optional<UTC> getTodaysSetUTC() const {
-            return getClosestUTCWithDegreesAltitudeAngle(0, false, 0, kUpperEdgeBodySizeCorrection);
+            return getClosestUTCWithDegreesAltitudeAngle(0, false, kCyclesToSearchForSetRise,
+                kUpperEdgeBodySizeCorrection);
         }
 
         inline std::optional<UTC> getTodaysRiseUTC() const {
-            return getClosestUTCWithDegreesAltitudeAngle(0, true, 0, kUpperEdgeBodySizeCorrection);
+            return getClosestUTCWithDegreesAltitudeAngle(0, true, kCyclesToSearchForSetRise,
+                kUpperEdgeBodySizeCorrection);
         }
 
         // rise or set
@@ -317,20 +330,21 @@ struct Sky {
                 kUpperEdgeBodySizeCorrection);
         }
 
-        inline UTC getTransitUTC() const {
+        inline std::optional<UTC> getTransitUTC() const {
             return utcFromTT(transit);
         }
 
-        inline UTC getBeginNadir() const {
+        inline std::optional<UTC> getBeginNadir() const {
             return utcFromTT(beginNadir);
         }
 
-        inline UTC getEndNadir() const {
+        inline std::optional<UTC> getEndNadir() const {
             return utcFromTT(endNadir);
         }
 
         inline Days getLengthDays() const {
-            return endNadir - beginNadir;
+            if (!isValid()) { return 0.; }
+            return *endNadir - *beginNadir;
         }
     };
 
@@ -338,7 +352,7 @@ struct Sky {
     static TrajectoryCycle<CelestialBody> getTrajectoryCycleFromUTC(UTC utc,
             const DegreesCoordinates &observer)
     {
-        return TrajectoryCycle<CelestialBody>(ttFromUTC(utc), observer);
+        return {ttFromUTC(utc), observer};
     }
 
     template <typename CelestialBody>
@@ -357,6 +371,21 @@ struct Sky {
     {
         return getTrajectoryCycleFromUTC<CelestialBody>(utc, observer).getClosestHorizonCrossingUTC(
             rise, forwardInTime);
+    }
+
+    struct NotableTimes {
+        std::optional<UTC> rise;
+        std::optional<UTC> transit;
+        std::optional<UTC> set;
+    };
+
+    template <typename CelestialBody>
+    static inline NotableTimes getNotableTimes(UTC utc, const DegreesCoordinates &observer) {
+        auto trajectoryCycle = getTrajectoryCycleFromUTC<CelestialBody>(utc, observer);
+        if (!trajectoryCycle.isValid()) { return {}; }
+        return {trajectoryCycle.getTodaysRiseUTC(),
+                trajectoryCycle.getTransitUTC(),
+                trajectoryCycle.getTodaysSetUTC()};
     }
 };
 
