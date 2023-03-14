@@ -9,3 +9,7 @@ Based on [mourner/suncalc](https://github.com/mourner/suncalc), [AAPlus library]
 
 To test against AAPlus library, use CMake argument -DSKYGAZING_AAPLUS_SRC="/path/to/aaplus_source/"
 and build ${SKYGAZING_AAPLUS_SRC}/cmake-build-release/lib/libaaplus.dylib yourself. 
+
+## Usage examples
+
+For examples of usage, see printObservation method in [skygazing_test.h](test/skygazing_test.h)

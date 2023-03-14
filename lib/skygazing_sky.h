@@ -87,12 +87,12 @@ struct Sky {
     }
 
     template <typename CelestialObject>
-    static CelestialObjectObservation observe(Seconds seconds,
+    static CelestialObjectObservation observe(UTC seconds,
             const DegreesCoordinates &observer, bool addRefraction = true)
     {
         TT tt = ttFromUTC(seconds);
-        auto obseration = observeInTT<CelestialObject>(tt, observer, addRefraction);
-        return obseration;
+        auto observation = observeInTT<CelestialObject>(tt, observer, addRefraction);
+        return observation;
     }
 
     template <typename CelestialObject>
@@ -271,11 +271,14 @@ struct Sky {
         std::optional<TT> getTTFromAngle(Rads angle, bool firstHalfOfTheCycle,
                 double bodySizeCorrection = 0) const
         {
+            bool accountForRefraction = angle >= -kUpperEdgeBodySizeCorrection;
             if (!isValid()) { return std::nullopt; }
-            auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle](TT tt) {
+            auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle, accountForRefraction](TT tt) {
                 auto observation = Sky::observeInTT<CelestialBody>(tt, observer, false);
                 observation.horizontal.lat += bodySizeCorrection;
-                observation.accountForRefraction();
+                if (accountForRefraction) {
+                    observation.accountForRefraction();
+                }
                 return observation.altitudeAngle() - angle;
             }};
 
@@ -303,21 +306,21 @@ struct Sky {
         }
 
         inline std::optional<UTC> getClosestUTCWithDegreesAltitudeAngle(Degrees angle,
-                bool firstHalfOfTheCycle, int shiftUpTo = 0, double bodySizeCorrection = 0) const
+                bool beforeTransit, int shiftUpTo = 0,
+                bool caculateForTheUpperEdge = true) const
         {
             return utcFromTT(getClosestTTWithRadsAltitudeAngle(
-                radsFromDegrees(angle), firstHalfOfTheCycle, shiftUpTo, bodySizeCorrection
+                radsFromDegrees(angle), beforeTransit, shiftUpTo,
+                caculateForTheUpperEdge ? kUpperEdgeBodySizeCorrection : 0.
             ));
         }
 
         inline std::optional<UTC> getTodaysSetUTC() const {
-            return getClosestUTCWithDegreesAltitudeAngle(0, false, kCyclesToSearchForSetRise,
-                kUpperEdgeBodySizeCorrection);
+            return getClosestUTCWithDegreesAltitudeAngle(0, false, kCyclesToSearchForSetRise);
         }
 
         inline std::optional<UTC> getTodaysRiseUTC() const {
-            return getClosestUTCWithDegreesAltitudeAngle(0, true, kCyclesToSearchForSetRise,
-                kUpperEdgeBodySizeCorrection);
+            return getClosestUTCWithDegreesAltitudeAngle(0, true, kCyclesToSearchForSetRise);
         }
 
         // rise or set
@@ -325,8 +328,7 @@ struct Sky {
                 bool rise, bool forwardInTime)
         {
             return getClosestUTCWithDegreesAltitudeAngle(
-                0, rise, (forwardInTime ? 1 : -1) * kMaxDaysInAYear,
-                kUpperEdgeBodySizeCorrection);
+                0, rise, (forwardInTime ? 1 : -1) * kMaxDaysInAYear);
         }
 
         inline std::optional<UTC> getTransitUTC() const {

@@ -144,6 +144,88 @@ struct Testing {
             << std::endl;
     }
 
+//    struct SingleTimeCase {
+//        DegreesCoordinates coordinates;
+//        std::string dateString;
+//        int timezone = 0;
+//    };
+
+    template <typename CelestialBody>
+    static void printObservation(const DegreesCoordinates &observerCoordinates, UTC utc, int timezone = 0) {
+        auto dateString = dateStringFromUTC(utc, timezone);
+        std::cout << "Observing at " << dateString << " timezone=" << timezone
+                  << " timestamp=" << utc << std::endl;
+        std::cout << "Observer is at " << observerCoordinates.lat << ", "
+                  << observerCoordinates.lng << std::endl;
+
+        auto observation = Sky::observe<CelestialBody>(utc, observerCoordinates);
+        std::cout << std::setprecision(10);
+        std::cout << "Azimuth = " << degreesFromRads(observation.azimuth()) << std::endl;
+        std::cout << "Altitude angle = " << degreesFromRads(observation.altitudeAngle()) << std::endl;
+        std::cout << "1m object casts a shadow with length " << std::cos(observation.altitudeAngle()) << "m\n";
+        std::cout << "Distance from earth center to the celestial body, km = "
+                  << observation.geocentricDistance / 1000 << std::endl;
+        std::cout << "Distance from observer to the celestial body, km = "
+                  << observation.distance / 1000 << std::endl;
+
+        std::cout << "^^^^^^^^^^Trajectory Cycle (=day, but starts and ends at the lowest trajectory point)^^^^^^^^^^\n";
+        auto cycle = Sky::getTrajectoryCycleFromUTC<CelestialBody>(utc, observerCoordinates);
+        if (!cycle.isValid()) {
+            std::cout << "invalid cycle\n";
+        } else {
+            auto beginNadir = *cycle.getBeginNadir();
+            auto transit = *cycle.getTransitUTC();
+            auto endNadir = *cycle.getEndNadir();
+            std::cout << "This cycle starts at nadir (lowest trajectory point): "
+                      << dateStringFromUTC(beginNadir, timezone) << std::endl;
+            std::cout << "The object is highest in the sky at: "
+                      << dateStringFromUTC(transit, timezone) << std::endl;
+            std::cout << "This cycle ends at nadir: "
+                      << dateStringFromUTC(endNadir, timezone) << std::endl;
+
+            std::cout << "Cycle length = " << (endNadir - beginNadir) / kSecondsInHour << " hours" << std::endl;
+
+            Degrees astronomicalTwilightAngle = -18.;
+            Degrees nauticalTwilightAngle = -12.;
+            Degrees civilTwilightAngle = -6;
+
+            for (auto beforeTransit : {true, false}) {
+                for (auto angle: {astronomicalTwilightAngle, nauticalTwilightAngle, civilTwilightAngle, 0.}) {
+                    bool calculateForTheUpperEdge = angle == 0.;
+                    auto crossingUTC = cycle.getClosestUTCWithDegreesAltitudeAngle(angle,
+                            beforeTransit,
+                            0, // if == N>0, will look for the crossing in the next N cycles
+                            calculateForTheUpperEdge);
+                    std::cout << "At the " << (beforeTransit ? "first"s : "second"s)
+                              << " half of the cycle, "
+                              << (calculateForTheUpperEdge ? "upper edge"s : "center"s)
+                              << " of the object ";
+                    if (!crossingUTC.has_value()) {
+                        std::cout << "never crossed " << angle << " degrees";
+                    } else {
+                        std::cout << "crossed " << angle << " degrees at "
+                                  << dateStringFromUTC(*crossingUTC, timezone) << std::endl;
+                    }
+                }
+            }
+
+            auto rise = cycle.getClosestUTCWithDegreesAltitudeAngle(0., true);
+            auto set = cycle.getClosestUTCWithDegreesAltitudeAngle(0., false);
+
+            if (rise.has_value() && set.has_value()) {
+                std::cout << "total time in the sky = " << (*set - *rise) / kSecondsInHour << " hours\n";
+            }
+        }
+
+    }
+
+    template <typename CelestialBody>
+    static void printObservation(const DegreesCoordinates &observerCoordinates, const std::string &dateString, int timezone = 0) {
+        std::cout << "-------------------------------\n";
+        auto utc = utcFromDateString(dateString, timezone).value();
+        printObservation<CelestialBody>(observerCoordinates, utc, timezone);
+    }
+
     static void printOnePoint(const CelestialTrajectoryTestData::SingleTimeCase &testCase) {
         std::cout << "Printing one point, dateString: " << testCase.dateString
             << " tz: " << testCase.timezone << " observer: "
@@ -155,8 +237,8 @@ struct Testing {
         std::cout << std::setprecision(10) << std::endl;
         std::cout << "moon azimuth " << degreesFromRads(moonObservation.azimuth()) << std::endl;
         std::cout << "moon altitude angle " << degreesFromRads(moonObservation.altitudeAngle()) << std::endl;
-        std::cout << "moon geocentric distance " << moonObservation.geocentricDistance / 1000 << std::endl;
-        std::cout << "moon topocentric distance " << moonObservation.distance / 1000 << std::endl;
+        std::cout << "moon geocentric distance, km " << moonObservation.geocentricDistance / 1000 << std::endl;
+        std::cout << "moon topocentric distance, km " << moonObservation.distance / 1000 << std::endl;
 
         auto cycle = Sky::getTrajectoryCycleFromUTC<Sun>(utc, testCase.coordinates);
         if (!cycle.isValid()) {
@@ -257,7 +339,15 @@ struct Testing {
     }
 
     static void runAllTests(bool runAnalytics = false) {
-        printOnePoint({{64.15103, -21.93079}, "2022-08-22T18:00:00Z"s, 0});
+        std::cout << "Observing Sun in Tbilisi\n";
+        DegreesCoordinates tbilisi{41.6938, 44.8015};
+        auto dateString = "2023-03-14T13:00:00Z"s;
+        int tbilisiGMTTimezone = 4;
+        printObservation<Sun>(tbilisi, dateString, tbilisiGMTTimezone);
+        std::cout << "\nObserving Moon in Tbilisi\n";
+        printObservation<Moon>(tbilisi, dateString, tbilisiGMTTimezone);
+        std::cout << "************************\n\n";
+
         if (runAnalytics) { Testing::runAnalytics(); }
 
         SKYGAZING_TIME_EXECUTION(testTimeTransforms());
