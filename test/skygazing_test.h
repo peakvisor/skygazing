@@ -161,8 +161,9 @@ struct Testing {
         auto observation = Sky::observe<CelestialBody>(utc, observerCoordinates);
         std::cout << std::setprecision(10);
         std::cout << "Azimuth = " << degreesFromRads(observation.azimuth()) << std::endl;
-        std::cout << "Altitude angle = " << degreesFromRads(observation.altitudeAngle()) << std::endl;
-        std::cout << "1m object casts a shadow with length " << std::cos(observation.altitudeAngle()) << "m\n";
+        auto altitudeAngle = observation.altitudeAngle();
+        std::cout << "Altitude angle = " << degreesFromRads(altitudeAngle) << std::endl;
+        std::cout << "1m object casts a shadow with length " << 1. / std::tan(altitudeAngle) << "m\n";
         std::cout << "Distance from earth center to the celestial body, km = "
                   << observation.geocentricDistance / 1000 << std::endl;
         std::cout << "Distance from observer to the celestial body, km = "
@@ -209,8 +210,8 @@ struct Testing {
                 }
             }
 
-            auto rise = cycle.getClosestUTCWithDegreesAltitudeAngle(0., true);
-            auto set = cycle.getClosestUTCWithDegreesAltitudeAngle(0., false);
+            auto rise = cycle.getClosestUTCWithDegreesAltitudeAngle(0., true, 180);
+            auto set = cycle.getClosestUTCWithDegreesAltitudeAngle(0., false, 180);
 
             if (rise.has_value() && set.has_value()) {
                 std::cout << "total time in the sky = " << (*set - *rise) / kSecondsInHour << " hours\n";

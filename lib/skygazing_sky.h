@@ -19,6 +19,7 @@ struct Sky {
     static constexpr Days kTimesFindingPrecision = 1. / kSecondsInDay;
     static constexpr Days kTimesFindingStep = 300. / kSecondsInDay;
     static constexpr int kCyclesToSearchForSetRise = 3;
+    static constexpr Rads kRefractionLowerBound = -1.9006387000003735_deg;
 
     struct EclipticPosition {
         Coordinates coordinates;
@@ -60,7 +61,10 @@ struct Sky {
         }
 
         void accountForRefraction() {
-            horizontal.lat += getRefractionFromTrue(horizontal.lat);
+            auto refractionDiff = getRefractionFromTrue(horizontal.lat);
+            if (horizontal.lat + refractionDiff > 0) {
+                horizontal.lat += refractionDiff;
+            }
         }
 
         TT tt;
@@ -105,7 +109,7 @@ struct Sky {
 
     static Rads getRefractionFromTrue(Rads altitudeAngle) noexcept {
         altitudeAngle = normalizeHugeRads(altitudeAngle);
-        constexpr double lowerBound = -1.9006387000003735_deg;
+        constexpr double lowerBound = kRefractionLowerBound;
 
         if (altitudeAngle <= lowerBound) {
             altitudeAngle = lowerBound;
@@ -271,7 +275,7 @@ struct Sky {
         std::optional<TT> getTTFromAngle(Rads angle, bool firstHalfOfTheCycle,
                 double bodySizeCorrection = 0) const
         {
-            bool accountForRefraction = angle >= -kUpperEdgeBodySizeCorrection;
+            bool accountForRefraction = angle >= kRefractionLowerBound;
             if (!isValid()) { return std::nullopt; }
             auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle, accountForRefraction](TT tt) {
                 auto observation = Sky::observeInTT<CelestialBody>(tt, observer, false);
@@ -290,8 +294,9 @@ struct Sky {
         std::optional<TT> getClosestTTWithRadsAltitudeAngle(Rads angle,
                 bool firstHalfOfTheCycle, int shiftUpTo = 0, double bodySizeCorrection = 0) const
         {
+            shiftUpTo = std::abs(shiftUpTo);
             auto trajectory = *this;
-            int step = shiftUpTo > 0 ? 1 : -1;
+            int step = firstHalfOfTheCycle ? -1 : 1;
             int sanityCheck = kMaxDaysInAYear;
             while (true) {
                 if (!trajectory.isValid()) { return std::nullopt; }
@@ -299,7 +304,7 @@ struct Sky {
                 auto tt = trajectory.getTTFromAngle(angle, firstHalfOfTheCycle, bodySizeCorrection);
                 if (tt) { return *tt; }
                 if (shiftUpTo == 0) { return std::nullopt; }
-                shiftUpTo -= step;
+                --shiftUpTo;
                 trajectory = trajectory.getShiftedCycle(step);
             }
             return std::nullopt;
