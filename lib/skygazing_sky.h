@@ -61,10 +61,7 @@ struct Sky {
         }
 
         void accountForRefraction() {
-            auto refractionDiff = getRefractionFromTrue(horizontal.lat);
-            if (horizontal.lat + refractionDiff > 0) {
-                horizontal.lat += refractionDiff;
-            }
+            horizontal.lat += getRefractionFromTrue(horizontal.lat);
         }
 
         TT tt;
@@ -273,9 +270,8 @@ struct Sky {
         }
 
         std::optional<TT> getTTFromAngle(Rads angle, bool firstHalfOfTheCycle,
-                double bodySizeCorrection = 0) const
+                double bodySizeCorrection = 0, bool accountForRefraction = true) const
         {
-            bool accountForRefraction = angle >= kRefractionLowerBound;
             if (!isValid()) { return std::nullopt; }
             auto altitudeAngleAnalyzer = FunctionAnalyzer{[this, bodySizeCorrection, angle, accountForRefraction](TT tt) {
                 auto observation = Sky::observeInTT<CelestialBody>(tt, observer, false);
@@ -292,7 +288,8 @@ struct Sky {
         }
 
         std::optional<TT> getClosestTTWithRadsAltitudeAngle(Rads angle,
-                bool firstHalfOfTheCycle, int shiftUpTo = 0, double bodySizeCorrection = 0) const
+                bool firstHalfOfTheCycle, int shiftUpTo = 0, double bodySizeCorrection = 0,
+                bool accountForRefraction = true) const
         {
             shiftUpTo = std::abs(shiftUpTo);
             auto trajectory = *this;
@@ -301,7 +298,7 @@ struct Sky {
             while (true) {
                 if (!trajectory.isValid()) { return std::nullopt; }
                 if (sanityCheck-- <= 0) { return std::nullopt; }
-                auto tt = trajectory.getTTFromAngle(angle, firstHalfOfTheCycle, bodySizeCorrection);
+                auto tt = trajectory.getTTFromAngle(angle, firstHalfOfTheCycle, bodySizeCorrection, accountForRefraction);
                 if (tt) { return *tt; }
                 if (shiftUpTo == 0) { return std::nullopt; }
                 --shiftUpTo;
@@ -312,11 +309,13 @@ struct Sky {
 
         inline std::optional<UTC> getClosestUTCWithDegreesAltitudeAngle(Degrees angle,
                 bool beforeTransit, int shiftUpTo = 0,
-                bool caculateForTheUpperEdge = true) const
+                bool caculateForTheUpperEdge = true,
+                bool accountForRefraction = true) const
         {
             return utcFromTT(getClosestTTWithRadsAltitudeAngle(
                 radsFromDegrees(angle), beforeTransit, shiftUpTo,
-                caculateForTheUpperEdge ? kUpperEdgeBodySizeCorrection : 0.
+                caculateForTheUpperEdge ? kUpperEdgeBodySizeCorrection : 0.,
+                accountForRefraction
             ));
         }
 

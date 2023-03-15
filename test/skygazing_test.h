@@ -193,10 +193,12 @@ struct Testing {
             for (auto beforeTransit : {true, false}) {
                 for (auto angle: {astronomicalTwilightAngle, nauticalTwilightAngle, civilTwilightAngle, 0.}) {
                     bool calculateForTheUpperEdge = angle == 0.;
+                    bool accountForRefraction = calculateForTheUpperEdge;
                     auto crossingUTC = cycle.getClosestUTCWithDegreesAltitudeAngle(angle,
                             beforeTransit,
                             0, // if == N>0, will look for the crossing in the next N cycles
-                            calculateForTheUpperEdge);
+                            calculateForTheUpperEdge,
+                            accountForRefraction);
                     std::cout << "At the " << (beforeTransit ? "first"s : "second"s)
                               << " half of the cycle, "
                               << (calculateForTheUpperEdge ? "upper edge"s : "center"s)
@@ -342,7 +344,7 @@ struct Testing {
     static void runAllTests(bool runAnalytics = false) {
         std::cout << "Observing Sun in Tbilisi\n";
         DegreesCoordinates tbilisi{41.6938, 44.8015};
-        auto dateString = "2023-03-14T13:00:00Z"s;
+        auto dateString = "2023-03-15T13:00:00Z"s;
         int tbilisiGMTTimezone = 4;
         printObservation<Sun>(tbilisi, dateString, tbilisiGMTTimezone);
         std::cout << "\nObserving Moon in Tbilisi\n";
