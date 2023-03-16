@@ -26,6 +26,11 @@ struct Sky {
         double distance;
     };
 
+    struct EquatorialPosition {
+        Coordinates coordinates;
+        double distance;
+    };
+
     struct CelestialObjectObservation {
         CelestialObjectObservation() = default;
         CelestialObjectObservation(CelestialObjectObservation &&other) = default;
@@ -44,6 +49,21 @@ struct Sky {
                     observer.lat, topocentric.lat)}
                 , geocentricDistance(eclipticPosition.distance)
                 , distance(getDistanceFromObserver(horizontal.lat, geocentricDistance)) {}
+
+        CelestialObjectObservation(TT tt, const EquatorialPosition &equatorialPosition,
+            const DegreesCoordinates &observerCoordinates, double observerAltitude = 0)
+            : tt{tt}
+            , observer{radsFromDegrees(observerCoordinates)}
+            , equatorial{equatorialPosition.coordinates}
+            , hourAngle{getLocalHourAngle(tt, observer.lng, equatorial.lng)}
+            , topocentric{getTopocentricCoordinates(equatorial, equatorialPosition.distance,
+                observer, observerAltitude, hourAngle)} // non-rotating earth ellispoid
+            , topocentricHourAngle{getLocalHourAngle(tt, observer.lng, topocentric.lng)}
+            , horizontal{getHorizontalCoordinatesFromHourAngle(
+                topocentricHourAngle,
+                observer.lat, topocentric.lat)}
+            , geocentricDistance(equatorialPosition.distance)
+            , distance(getDistanceFromObserver(horizontal.lat, geocentricDistance)) {}
 
         Rads declination() const { return equatorial.lat; }
         Rads rightAscension() const { return equatorial.lng; }
@@ -93,6 +113,30 @@ struct Sky {
     {
         TT tt = ttFromUTC(seconds);
         auto observation = observeInTT<CelestialObject>(tt, observer, addRefraction);
+        return observation;
+    }
+
+    static CelestialObjectObservation observeEquatorialInTT(
+            TT tt, const DegreesCoordinates &observer,
+            const DegreesCoordinates &equatorialCoordinates,
+            double distance,
+            bool addRefraction = true)
+    {
+        EquatorialPosition position{radsFromDegrees(equatorialCoordinates), distance};
+        auto observation = CelestialObjectObservation(tt, position, observer);
+        if (addRefraction) { observation.accountForRefraction(); }
+        return observation;
+    }
+
+    static CelestialObjectObservation observeEquatorial(
+            UTC seconds, const DegreesCoordinates &observer,
+            const DegreesCoordinates &equatorialCoordinates,
+            double distance,
+            bool addRefraction = true)
+   {
+        TT tt = ttFromUTC(seconds);
+        auto observation = observeEquatorialInTT(tt, observer, equatorialCoordinates,
+                                                 distance, addRefraction);
         return observation;
     }
 
